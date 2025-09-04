@@ -2663,8 +2663,8 @@ export class FileProcessingService {
       company: {},
       personal: {},
       financial: {},
-      dates: {},
-      identifiers: {},
+      dates: [], // Changed from {} to [] since we use .push() on it
+      identifiers: [], // Changed from {} to [] since we use .push() on it
       amounts: {},
       metadata: {}
     };
