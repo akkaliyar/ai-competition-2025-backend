@@ -6,6 +6,19 @@ import * as http from 'http';
 // Create a simple HTTP server immediately for health checks
 const createHealthCheckServer = (port: number) => {
   const server = http.createServer((req, res) => {
+    // Set CORS headers for all requests
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Allow-Headers');
+    res.setHeader('Access-Control-Allow-Credentials', 'false');
+    
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
     if (req.url === '/healthz' && req.method === 'GET') {
       console.log('🔍 Railway health check (HTTP server)');
       res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -68,18 +81,35 @@ async function bootstrap() {
       logger: ['error', 'warn', 'log'], // Enable logging for debugging
     });
     
-    // Enable CORS for frontend communication
+    // Enable CORS for all origins - Allow everything
     app.enableCors({
-      origin: true, // Allow all origins in development
+      origin: true, // Allow all origins
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Allow-Headers'],
-      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Allow-Headers', 'Access-Control-Allow-Origin'],
+      credentials: false, // Set to false for wildcard origin
       preflightContinue: false,
       optionsSuccessStatus: 204,
+      maxAge: 86400, // Cache preflight for 24 hours
     });
 
     // Global validation pipe
     app.useGlobalPipes(new ValidationPipe());
+
+    // Global CORS middleware for all routes
+    app.use((req, res, next) => {
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Allow-Headers');
+      res.header('Access-Control-Allow-Credentials', 'false');
+      
+      // Handle preflight OPTIONS request
+      if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+      }
+      
+      next();
+    });
 
     // Simple Express-style health endpoints as backup
     app.use('/ping', (req, res) => {
