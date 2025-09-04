@@ -29,6 +29,7 @@ import { BillData } from './entities/bill-data.entity';
         console.log('MYSQLUSER:', process.env.MYSQLUSER);
         console.log('MYSQLDATABASE:', process.env.MYSQLDATABASE);
         console.log('RAILWAY_PRIVATE_DOMAIN:', process.env.RAILWAY_PRIVATE_DOMAIN);
+        console.log('RAILWAY_TCP_PROXY_DOMAIN:', process.env.RAILWAY_TCP_PROXY_DOMAIN);
         
         const config = {
           type: 'mysql' as const,
@@ -43,11 +44,9 @@ import { BillData } from './entities/bill-data.entity';
           retryAttempts: 5,         // Increased retries for Railway
           retryDelay: 3000,         // Increased delay for Railway
           maxQueryExecutionTime: 30000,
-          // Remove invalid MySQL2 options
+          // Remove invalid MySQL2 options that cause warnings
           extra: {
             connectionLimit: 10,
-            acquireTimeout: 30000,
-            timeout: 30000,
             reconnect: true,
           }
         };
@@ -89,6 +88,19 @@ import { BillData } from './entities/bill-data.entity';
           return {
             ...config,
             url: process.env.MYSQL_PUBLIC_URL,
+          };
+        }
+        
+        // Priority 5: Use Railway TCP Proxy (for external connections)
+        if (process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT) {
+          console.log('📡 Using Railway TCP Proxy for connection');
+          return {
+            ...config,
+            host: process.env.RAILWAY_TCP_PROXY_DOMAIN,
+            port: parseInt(process.env.RAILWAY_TCP_PROXY_PORT),
+            username: process.env.MYSQLUSER || 'root',
+            password: process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '',
+            database: process.env.MYSQLDATABASE || 'railway',
           };
         }
         
