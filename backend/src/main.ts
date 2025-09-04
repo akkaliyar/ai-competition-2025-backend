@@ -19,7 +19,23 @@ const createHealthCheckServer = (port: number) => {
         message: 'AI CRM Backend Health Server',
         status: 'running',
         timestamp: new Date().toISOString(),
-        endpoints: ['/healthz', '/ping', '/']
+        endpoints: ['/healthz', '/ping', '/', '/api/files', '/api/files/upload']
+      }));
+    } else if (req.url === '/api/files' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: 'File API endpoint (Express fallback)',
+        status: 'running',
+        timestamp: new Date().toISOString(),
+        note: 'Database connection required for full functionality'
+      }));
+    } else if (req.url === '/api/files/upload' && req.method === 'POST') {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: 'Service temporarily unavailable',
+        message: 'Database connection required for file uploads',
+        status: 'database_connection_failed',
+        timestamp: new Date().toISOString()
       }));
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -30,6 +46,7 @@ const createHealthCheckServer = (port: number) => {
   server.listen(port, '0.0.0.0', () => {
     console.log(`✅ Health check server started on port ${port}`);
     console.log(`🔗 Railway health check available at: http://0.0.0.0:${port}/healthz`);
+    console.log(`🔗 API endpoints available at: http://0.0.0.0:${port}/api/files`);
   });
 
   return server;
@@ -90,6 +107,7 @@ async function bootstrap() {
     console.log(`🔗 Railway health check at: http://0.0.0.0:${port}/healthz`);
     console.log(`🔗 Status endpoint at: http://0.0.0.0:${port}/status`);
     console.log(`🔗 Ping endpoint at: http://0.0.0.0:${port}/ping`);
+    console.log(`🔗 API endpoints at: http://0.0.0.0:${port}/api/files`);
     
     // Graceful shutdown handling
     process.on('SIGTERM', async () => {
@@ -110,6 +128,7 @@ async function bootstrap() {
     console.error('❌ Failed to start AI CRM Backend:', error);
     console.log('⚠️ But health check server is still running for Railway');
     console.log('⚠️ Database connection failed, but service is available for health checks');
+    console.log('⚠️ API endpoints are available but with limited functionality');
     
     // Keep the health check server running even if NestJS fails
     process.on('SIGTERM', () => {
@@ -127,6 +146,7 @@ async function bootstrap() {
     // Don't exit - let the health check server keep running
     // This ensures Railway can always reach /healthz
     console.log('🔄 Health check server will continue running for Railway');
+    console.log('🔄 API endpoints are available with fallback responses');
     
     // Keep the process alive
     setInterval(() => {
@@ -152,5 +172,6 @@ bootstrap().catch(error => {
   console.error('❌ Bootstrap failed:', error);
   console.log('⚠️ But health check server is still running for Railway');
   console.log('⚠️ Railway can still reach /healthz endpoint');
+  console.log('⚠️ API endpoints are available with fallback responses');
   // Don't exit - let the health check server keep running
 });
