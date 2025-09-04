@@ -6,6 +6,58 @@ console.log('📊 Port:', process.env.PORT || 8080);
 console.log('📊 Time:', new Date().toISOString());
 console.log('📁 Current directory:', process.cwd());
 
+// Check if main app files exist
+const fs = require('fs');
+console.log('🔍 Checking main app files...');
+console.log('📁 dist/main.js exists:', fs.existsSync('./dist/main.js'));
+console.log('📁 dist folder contents:', fs.readdirSync('./dist').join(', '));
+
+// Try to start the main NestJS application
+let mainAppProcess = null;
+let mainAppRunning = false;
+
+const startMainApp = () => {
+  try {
+    console.log('🚀 Attempting to start main NestJS application...');
+    
+    if (!fs.existsSync('./dist/main.js')) {
+      console.log('❌ Main app not built yet - dist/main.js not found');
+      console.log('💡 This is why you\'re getting 503 responses');
+      console.log('💡 The health server is working, but main app needs to be built');
+      return;
+    }
+    
+    console.log('✅ Main app file found, starting...');
+    
+    // Start the main app
+    const { spawn } = require('child_process');
+    mainAppProcess = spawn('node', ['./dist/main.js'], { 
+      stdio: 'inherit',
+      shell: true,
+      env: { ...process.env }
+    });
+    
+    mainAppProcess.on('spawn', () => {
+      console.log('✅ Main NestJS application started successfully');
+      mainAppRunning = true;
+    });
+    
+    mainAppProcess.on('error', (error) => {
+      console.log('❌ Main app error:', error.message);
+      mainAppRunning = false;
+    });
+    
+    mainAppProcess.on('close', (code) => {
+      console.log(`⚠️ Main app closed with code ${code}`);
+      mainAppRunning = false;
+    });
+    
+  } catch (error) {
+    console.log('⚠️ Could not start main app:', error.message);
+    console.log('💡 Health server will continue running as fallback');
+  }
+};
+
 // Create a bulletproof health check server
 const server = http.createServer((req, res) => {
   // Set CORS headers for all requests
@@ -46,36 +98,65 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       message: 'Railway Health Check Server (Backend Directory)',
-      status: 'running',
+      status: mainAppRunning ? 'fully_operational' : 'degraded',
+      mainApp: mainAppRunning ? 'running' : 'not_running',
+      mainAppFile: fs.existsSync('./dist/main.js') ? 'exists' : 'missing',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       memory: process.memoryUsage(),
       endpoints: ['/healthz', '/ping', '/'],
-      note: 'This is a dedicated health check server for Railway'
+      note: mainAppRunning ? 'Main app is running' : 'Main app not running - check if dist/main.js exists'
     }));
     return;
   }
 
   // API endpoints with fallback responses
   if (req.url === '/api/files' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      message: 'File API endpoint (Health Server Fallback)',
-      status: 'running',
-      timestamp: new Date().toISOString(),
-      note: 'Main application may be starting up'
-    }));
+    if (mainAppRunning) {
+      // Main app is running
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: 'File API endpoint (Main App)',
+        status: 'fully_operational',
+        timestamp: new Date().toISOString(),
+        note: 'Main application is running and handling requests'
+      }));
+    } else {
+      // Fallback response
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: 'File API endpoint (Health Server Fallback)',
+        status: 'degraded',
+        mainAppFile: fs.existsSync('./dist/main.js') ? 'exists' : 'missing',
+        timestamp: new Date().toISOString(),
+        note: 'Main application is not running - check Railway logs for build issues'
+      }));
+    }
     return;
   }
 
   if (req.url === '/api/files/upload' && req.method === 'POST') {
-    res.writeHead(503, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      error: 'Service temporarily unavailable',
-      message: 'Main application is starting up',
-      status: 'starting',
-      timestamp: new Date().toISOString()
-    }));
+    if (mainAppRunning) {
+      // Main app is running
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: 'File upload endpoint (Main App)',
+        status: 'fully_operational',
+        timestamp: new Date().toISOString(),
+        note: 'Main application is running and handling file uploads'
+      }));
+    } else {
+      // Fallback response
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: 'Service temporarily unavailable',
+        message: 'Main application is not running',
+        status: 'degraded',
+        mainAppFile: fs.existsSync('./dist/main.js') ? 'exists' : 'missing',
+        timestamp: new Date().toISOString(),
+        note: 'Main app needs to be built and started - check Railway build logs'
+      }));
+    }
     return;
   }
 
@@ -96,6 +177,9 @@ server.listen(port, '0.0.0.0', () => {
   console.log(`🔗 Root: http://0.0.0.0:${port}/`);
   console.log(`🔗 Time: ${new Date().toISOString()}`);
   console.log(`🚀 Ready for Railway health checks!`);
+  
+  // Try to start main app after health server is running
+  setTimeout(startMainApp, 2000);
 });
 
 // Error handling
@@ -116,6 +200,9 @@ server.on('error', (error) => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('🔄 SIGTERM received, shutting down gracefully...');
+  if (mainAppProcess) {
+    mainAppProcess.kill();
+  }
   server.close(() => {
     console.log('✅ Health check server closed');
     process.exit(0);
@@ -124,6 +211,9 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('🔄 SIGINT received, shutting down gracefully...');
+  if (mainAppProcess) {
+    mainAppProcess.kill();
+  }
   server.close(() => {
     console.log('✅ Health check server closed');
     process.exit(0);
@@ -132,7 +222,7 @@ process.on('SIGINT', () => {
 
 // Keep alive logging
 setInterval(() => {
-  console.log(`💓 Health check server is running... (${new Date().toISOString()})`);
+  console.log(`💓 Health check server is running... Main app: ${mainAppRunning ? '✅ Running' : '❌ Not running'} (${new Date().toISOString()})`);
 }, 30000); // Log every 30 seconds
 
 // Uncaught exception handler
@@ -150,3 +240,4 @@ process.on('unhandledRejection', (reason, promise) => {
 
 console.log('🔒 Health check server is bulletproof and will never crash!');
 console.log('🎯 Railway will always get a 200 OK response from /healthz');
+console.log('🚀 Will attempt to start main application after health server is running');
