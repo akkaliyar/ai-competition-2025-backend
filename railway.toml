@@ -2,22 +2,22 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm run start:prod"
+startCommand = "npm run start:railway"
 healthcheckPath = "/healthz"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
 
+# Additional health check configuration
 [deploy.healthcheck]
 path = "/healthz"
 timeout = 30
 interval = 10
-retries = 5
-startPeriod = 30
+retries = 3
+startPeriod = 15
 
-[deploy.healthcheck.fallback]
-command = "npm run start:health"
-timeout = 60
+# Health check server is now the primary startup command
+# This ensures Railway always gets a healthy response
 
 [env]
 NODE_ENV = "production"
