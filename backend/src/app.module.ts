@@ -41,7 +41,6 @@ import { BillData } from './entities/bill-data.entity';
           timezone: '+00:00',
           // Only use valid MySQL2 connection options
           connectTimeout: 30000,
-          acquireTimeout: 30000,
           timeout: 30000,
           retryAttempts: 5,
           retryDelay: 3000,
@@ -51,6 +50,7 @@ import { BillData } from './entities/bill-data.entity';
         // Priority 1: Use DATABASE_URL if provided (Railway style)
         if (process.env.DATABASE_URL) {
           console.log('📡 Using DATABASE_URL for connection');
+          console.log('📡 DATABASE_URL value:', process.env.DATABASE_URL.replace(/:[^:@]*@/, ':****@')); // Hide password
           return {
             ...config,
             url: process.env.DATABASE_URL,
@@ -60,6 +60,7 @@ import { BillData } from './entities/bill-data.entity';
         // Priority 2: Use MYSQL_URL if provided (Railway MySQL)
         if (process.env.MYSQL_URL) {
           console.log('📡 Using MYSQL_URL for connection');
+          console.log('📡 MYSQL_URL value:', process.env.MYSQL_URL.replace(/:[^:@]*@/, ':****@')); // Hide password
           return {
             ...config,
             url: process.env.MYSQL_URL,
@@ -69,6 +70,10 @@ import { BillData } from './entities/bill-data.entity';
         // Priority 3: Use Railway MySQL environment variables
         if (process.env.MYSQLHOST && process.env.MYSQLUSER && process.env.MYSQLDATABASE) {
           console.log('📡 Using Railway MySQL variables for connection');
+          console.log('📡 Host:', process.env.MYSQLHOST);
+          console.log('📡 Port:', process.env.MYSQLPORT || 3306);
+          console.log('📡 User:', process.env.MYSQLUSER);
+          console.log('📡 Database:', process.env.MYSQLDATABASE);
           return {
             ...config,
             host: process.env.MYSQLHOST,
@@ -82,6 +87,7 @@ import { BillData } from './entities/bill-data.entity';
         // Priority 4: Use MYSQL_PUBLIC_URL if provided
         if (process.env.MYSQL_PUBLIC_URL) {
           console.log('📡 Using MYSQL_PUBLIC_URL for connection');
+          console.log('📡 MYSQL_PUBLIC_URL value:', process.env.MYSQL_PUBLIC_URL.replace(/:[^:@]*@/, ':****@')); // Hide password
           return {
             ...config,
             url: process.env.MYSQL_PUBLIC_URL,
@@ -91,6 +97,8 @@ import { BillData } from './entities/bill-data.entity';
         // Priority 5: Use Railway TCP Proxy (for external connections)
         if (process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT) {
           console.log('📡 Using Railway TCP Proxy for connection');
+          console.log('📡 Proxy Domain:', process.env.RAILWAY_TCP_PROXY_DOMAIN);
+          console.log('📡 Proxy Port:', process.env.RAILWAY_TCP_PROXY_PORT);
           return {
             ...config,
             host: process.env.RAILWAY_TCP_PROXY_DOMAIN,
@@ -103,6 +111,10 @@ import { BillData } from './entities/bill-data.entity';
         
         // Fallback to individual environment variables (local development)
         console.log('📡 Using individual DB variables for connection (local dev)');
+        console.log('📡 Host:', process.env.DB_HOST || 'localhost');
+        console.log('📡 Port:', process.env.DB_PORT || 3306);
+        console.log('📡 User:', process.env.DB_USERNAME || 'root');
+        console.log('📡 Database:', process.env.DB_NAME || 'ai_crm');
         return {
           ...config,
           host: process.env.DB_HOST || 'localhost',
