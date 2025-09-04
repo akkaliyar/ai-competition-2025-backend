@@ -1,6 +1,5 @@
 [build]
 builder = "nixpacks"
-buildCommand = "chmod +x railway-build.sh && ./railway-build.sh"
 
 [deploy]
 startCommand = "npm run start:railway:health"

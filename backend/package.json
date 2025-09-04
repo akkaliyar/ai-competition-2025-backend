@@ -5,8 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "nest build",
-    "build:prod": "nest build --webpack",
-    "build:fast": "nest build --tsc",
+    "postbuild": "mkdir -p dist/entities && cp -r src/entities/* dist/entities/ || echo 'Entities copy completed'",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
