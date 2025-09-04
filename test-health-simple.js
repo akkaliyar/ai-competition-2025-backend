@@ -4,7 +4,7 @@ const testHealthz = () => {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'localhost',
-      port: 8080,
+      port: 3001,
       path: '/healthz',
       method: 'GET',
       timeout: 5000
@@ -39,7 +39,7 @@ const testHealthz = () => {
 
 const testHealthzEndpoint = async () => {
   try {
-    console.log('🧪 Testing /healthz endpoint...');
+    console.log('🧪 Testing /healthz endpoint on port 3001...');
     const result = await testHealthz();
     console.log(`✅ /healthz: ${result.statusCode} - "${result.data}"`);
     
@@ -50,7 +50,7 @@ const testHealthzEndpoint = async () => {
     }
   } catch (error) {
     console.log(`❌ /healthz: ${error.message}`);
-    console.log('💡 Make sure the server is running on port 8080');
+    console.log('💡 Make sure the server is running on port 3001');
   }
 };
 
