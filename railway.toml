@@ -2,21 +2,19 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "npm run start:prod"
 healthcheckPath = "/healthz"
-healthcheckTimeout = 300
+healthcheckTimeout = 30
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5
+restartPolicyMaxRetries = 10
 
-# Additional health check configuration
 [deploy.healthcheck]
 path = "/healthz"
-timeout = 300
-interval = 30
+timeout = 30
+interval = 10
 retries = 5
-startPeriod = 60
+startPeriod = 30
 
-# Fallback health check server if main app fails
 [deploy.healthcheck.fallback]
 command = "npm run start:health"
 timeout = 60
