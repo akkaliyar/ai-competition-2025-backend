@@ -24,48 +24,12 @@ export class HealthController {
 
   @Get('healthz')
   @HttpCode(HttpStatus.OK)
-  async healthz(@Res() res: Response) {
-    try {
-      // Railway health check endpoint - more robust
-      console.log('🔍 Health check requested from Railway');
-      console.log('📊 Process uptime:', process.uptime());
-      console.log('📊 Memory usage:', process.memoryUsage());
-      console.log('📊 Environment:', process.env.NODE_ENV);
-      
-      // Check if database is accessible (but don't fail if it's not)
-      let dbStatus = 'unknown';
-      try {
-        if (this.dataSource.isInitialized) {
-          await this.dataSource.query('SELECT 1');
-          dbStatus = 'connected';
-        } else {
-          dbStatus = 'not_initialized';
-        }
-      } catch (dbError) {
-        console.log('⚠️ Database health check failed:', dbError.message);
-        dbStatus = 'error';
-      }
-
-      // Always return 200 for Railway health check, but include status info
-      res.status(200).json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        database: dbStatus,
-        memory: process.memoryUsage(),
-        environment: process.env.NODE_ENV || 'development'
-      });
-    } catch (error) {
-      console.error('❌ Health check error:', error);
-      // Even if there's an error, return 200 to prevent Railway from marking as unhealthy
-      res.status(200).json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        error: 'Health check had issues but service is running',
-        environment: process.env.NODE_ENV || 'development'
-      });
-    }
+  healthz(@Res() res: Response) {
+    // Railway health check endpoint - simplest possible response
+    console.log('🔍 Health check requested from Railway');
+    
+    // Always return 200 OK with minimal response
+    res.status(200).send('OK');
   }
 
   @Get('status')
