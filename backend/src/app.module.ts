@@ -35,8 +35,8 @@ import { BillData } from './entities/bill-data.entity';
         const config = {
           type: 'mysql' as const,
           entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData],
-          synchronize: false,
-          logging: false,
+          synchronize: true, // Enable table creation
+          logging: true, // Enable logging to see what's happening
           charset: 'utf8mb4',
           timezone: '+00:00',
           // Only use valid MySQL2 connection options
@@ -45,6 +45,9 @@ import { BillData } from './entities/bill-data.entity';
           retryAttempts: 5,
           retryDelay: 3000,
           maxQueryExecutionTime: 30000,
+          // Additional options for better connection
+          keepConnectionAlive: true,
+          autoLoadEntities: true,
         };
 
         // Priority 1: Use DATABASE_URL if provided (Railway style)
