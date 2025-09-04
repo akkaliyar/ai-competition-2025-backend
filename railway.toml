@@ -16,6 +16,11 @@ interval = 30
 retries = 5
 startPeriod = 60
 
+# Fallback health check server if main app fails
+[deploy.healthcheck.fallback]
+command = "npm run start:health"
+timeout = 60
+
 [env]
 NODE_ENV = "production"
 SERVICE_TYPE = "backend"

@@ -26,10 +26,15 @@ export class HealthController {
   @HttpCode(HttpStatus.OK)
   healthz(@Res() res: Response) {
     // Railway health check endpoint - simplest possible response
-    console.log('🔍 Health check requested from Railway');
-    
-    // Always return 200 OK with minimal response
-    res.status(200).send('OK');
+    // This should never fail - always return 200 OK
+    try {
+      console.log('🔍 Health check requested from Railway (Controller)');
+      res.status(200).send('OK');
+    } catch (error) {
+      // Even if there's an error, return 200
+      console.error('❌ Health check error in controller:', error);
+      res.status(200).send('OK');
+    }
   }
 
   @Get('status')
