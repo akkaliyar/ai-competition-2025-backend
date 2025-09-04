@@ -13,6 +13,14 @@ const createHealthCheckServer = (port: number) => {
     } else if (req.url === '/ping' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('pong');
+    } else if (req.url === '/' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: 'AI CRM Backend Health Server',
+        status: 'running',
+        timestamp: new Date().toISOString(),
+        endpoints: ['/healthz', '/ping', '/']
+      }));
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not Found');
@@ -101,6 +109,7 @@ async function bootstrap() {
   } catch (error) {
     console.error('❌ Failed to start AI CRM Backend:', error);
     console.log('⚠️ But health check server is still running for Railway');
+    console.log('⚠️ Database connection failed, but service is available for health checks');
     
     // Keep the health check server running even if NestJS fails
     process.on('SIGTERM', () => {
@@ -117,11 +126,13 @@ async function bootstrap() {
     
     // Don't exit - let the health check server keep running
     // This ensures Railway can always reach /healthz
+    console.log('🔄 Health check server will continue running for Railway');
   }
 }
 
 bootstrap().catch(error => {
   console.error('❌ Bootstrap failed:', error);
   console.log('⚠️ But health check server is still running for Railway');
+  console.log('⚠️ Railway can still reach /healthz endpoint');
   // Don't exit - let the health check server keep running
 });

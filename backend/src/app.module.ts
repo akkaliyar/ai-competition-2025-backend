@@ -24,9 +24,11 @@ import { BillData } from './entities/bill-data.entity';
       useFactory: () => {
         console.log('🔧 Configuring database connection...');
         console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
-        console.log('DB_HOST:', process.env.DB_HOST);
+        console.log('MYSQL_URL exists:', !!process.env.MYSQL_URL);
+        console.log('MYSQLHOST:', process.env.MYSQLHOST);
+        console.log('MYSQLUSER:', process.env.MYSQLUSER);
+        console.log('MYSQLDATABASE:', process.env.MYSQLDATABASE);
         console.log('RAILWAY_PRIVATE_DOMAIN:', process.env.RAILWAY_PRIVATE_DOMAIN);
-        console.log('MYSQL_ROOT_PASSWORD exists:', !!process.env.MYSQL_ROOT_PASSWORD);
         
         const config = {
           type: 'mysql' as const,
@@ -35,22 +37,22 @@ import { BillData } from './entities/bill-data.entity';
           logging: false, // Disable logging to reduce noise
           charset: 'utf8mb4',
           timezone: '+00:00',
-          connectTimeout: 10000,    // Increased timeout for Railway
-          acquireTimeout: 10000,    // Increased timeout for Railway
-          timeout: 10000,           // Increased timeout for Railway
-          retryAttempts: 3,         // Increased retries for Railway
-          retryDelay: 2000,         // Increased delay for Railway
-          maxQueryExecutionTime: 10000,
-          // Add connection pool settings
+          connectTimeout: 30000,    // Increased timeout for Railway
+          acquireTimeout: 30000,    // Increased timeout for Railway
+          timeout: 30000,           // Increased timeout for Railway
+          retryAttempts: 5,         // Increased retries for Railway
+          retryDelay: 3000,         // Increased delay for Railway
+          maxQueryExecutionTime: 30000,
+          // Remove invalid MySQL2 options
           extra: {
             connectionLimit: 10,
-            acquireTimeout: 10000,
-            timeout: 10000,
+            acquireTimeout: 30000,
+            timeout: 30000,
             reconnect: true,
           }
         };
 
-        // If DATABASE_URL is provided (Railway style), use it
+        // Priority 1: Use DATABASE_URL if provided (Railway style)
         if (process.env.DATABASE_URL) {
           console.log('📡 Using DATABASE_URL for connection');
           return {
@@ -59,8 +61,39 @@ import { BillData } from './entities/bill-data.entity';
           };
         }
         
-        // Fallback to individual environment variables
-        console.log('📡 Using individual DB variables for connection');
+        // Priority 2: Use MYSQL_URL if provided (Railway MySQL)
+        if (process.env.MYSQL_URL) {
+          console.log('📡 Using MYSQL_URL for connection');
+          return {
+            ...config,
+            url: process.env.MYSQL_URL,
+          };
+        }
+        
+        // Priority 3: Use Railway MySQL environment variables
+        if (process.env.MYSQLHOST && process.env.MYSQLUSER && process.env.MYSQLDATABASE) {
+          console.log('📡 Using Railway MySQL variables for connection');
+          return {
+            ...config,
+            host: process.env.MYSQLHOST,
+            port: parseInt(process.env.MYSQLPORT) || 3306,
+            username: process.env.MYSQLUSER,
+            password: process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '',
+            database: process.env.MYSQLDATABASE,
+          };
+        }
+        
+        // Priority 4: Use MYSQL_PUBLIC_URL if provided
+        if (process.env.MYSQL_PUBLIC_URL) {
+          console.log('📡 Using MYSQL_PUBLIC_URL for connection');
+          return {
+            ...config,
+            url: process.env.MYSQL_PUBLIC_URL,
+          };
+        }
+        
+        // Fallback to individual environment variables (local development)
+        console.log('📡 Using individual DB variables for connection (local dev)');
         return {
           ...config,
           host: process.env.DB_HOST || 'localhost',
