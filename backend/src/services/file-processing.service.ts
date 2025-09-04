@@ -2666,62 +2666,137 @@ export class FileProcessingService {
       dates: [], // Changed from {} to [] since we use .push() on it
       identifiers: [], // Changed from {} to [] since we use .push() on it
       amounts: {},
-      metadata: {}
+      metadata: {},
+      // Enhanced generic fields for all document types
+      contact: {},
+      location: {},
+      references: [],
+      notes: [],
+      attachments: [],
+      signatures: [],
+      terms: {},
+      status: {}
     };
 
-    // Extract company/organization information
-    const companyMatch = text.match(/^([^\n]+)/);
-    if (companyMatch) {
-      structuredData.company.name = companyMatch[1].trim();
+    // Enhanced company/organization information extraction
+    const companyPatterns = [
+      /^([^\n]+)/, // First line
+      /(?:company|organization|business|firm|corp|inc|ltd|llc)\s*:?\s*([^\n]+)/i,
+      /(?:from|sender|issued\s+by)\s*:?\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of companyPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].trim()) {
+        structuredData.company.name = match[1].trim();
+        break;
+      }
     }
 
-    const addressMatch = text.match(/^[^\n]+\n([^\n]+)/);
-    if (addressMatch) {
-      structuredData.company.address = addressMatch[1].trim();
+    // Enhanced address extraction
+    const addressPatterns = [
+      /^[^\n]+\n([^\n]+)/, // Second line
+      /(?:address|location|street|city|state|country)\s*:?\s*([^\n]+)/i,
+      /(?:registered\s+office|headquarters|branch)\s*:?\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of addressPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].trim()) {
+        structuredData.company.address = match[1].trim();
+        break;
+      }
     }
 
-    // Extract document type and period
-    const documentTypeMatch = text.match(/(payslip|invoice|bill|receipt|statement|report)\s+(?:for\s+the\s+)?(?:month\s+of\s+)?([^\n]+)/i);
-    if (documentTypeMatch) {
-      structuredData.document.type = documentTypeMatch[1].toLowerCase();
-      structuredData.document.period = documentTypeMatch[2].trim();
+    // Enhanced document type detection
+    const documentTypePatterns = [
+      /(payslip|invoice|bill|receipt|statement|report|contract|agreement|letter|memo|notice|form|application|certificate|license|permit)\s+(?:for\s+the\s+)?(?:month\s+of\s+)?([^\n]+)/i,
+      /(?:this\s+is\s+a\s+|document\s+type\s*:?\s*)([^\n]+)/i,
+      /(?:subject\s*:?\s*)([^\n]+)/i
+    ];
+    
+    for (const pattern of documentTypePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        structuredData.document.type = match[1].toLowerCase();
+        if (match[2]) {
+          structuredData.document.period = match[2].trim();
+        }
+        break;
+      }
     }
 
-    // Extract personal information (name, code, designation, etc.)
+    // Enhanced personal information extraction
     const namePatterns = [
-      /(?:employee|customer|client|name)\s*:?\s*([^\n]+)/i,
-      /(?:name)\s*:?\s*([^\n]+)/i
+      /(?:employee|customer|client|name|recipient|addressee|applicant|signatory)\s*:?\s*([^\n]+)/i,
+      /(?:name)\s*:?\s*([^\n]+)/i,
+      /(?:to|for|attn|attention)\s*:?\s*([^\n]+)/i
     ];
     
     for (const pattern of namePatterns) {
       const match = text.match(pattern);
-      if (match) {
+      if (match && match[1].trim()) {
         structuredData.personal.name = match[1].trim();
         break;
       }
     }
 
     const codePatterns = [
-      /(?:employee|customer|client|account|id)\s*(?:code|number|id)\s*:?\s*([^\n]+)/i,
-      /(?:code|number|id)\s*:?\s*([^\n]+)/i
+      /(?:employee|customer|client|account|id|reference|ref|number|code)\s*(?:code|number|id|no)\s*:?\s*([^\n]+)/i,
+      /(?:code|number|id|no)\s*:?\s*([^\n]+)/i,
+      /(?:tracking|order|case|file|policy)\s*(?:number|id|no)\s*:?\s*([^\n]+)/i
     ];
     
     for (const pattern of codePatterns) {
       const match = text.match(pattern);
-      if (match) {
+      if (match && match[1].trim()) {
         structuredData.personal.code = match[1].trim();
         break;
       }
     }
 
-    const designationMatch = text.match(/(?:designation|title|position|role)\s*:?\s*([^\n]+)/i);
-    if (designationMatch) {
-      structuredData.personal.designation = designationMatch[1].trim();
+    const designationPatterns = [
+      /(?:designation|title|position|role|job\s+title|occupation)\s*:?\s*([^\n]+)/i,
+      /(?:as|working\s+as|employed\s+as)\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of designationPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].trim()) {
+        structuredData.personal.designation = match[1].trim();
+        break;
+      }
     }
 
-    const departmentMatch = text.match(/(?:department|division|section)\s*:?\s*([^\n]+)/i);
-    if (departmentMatch) {
-      structuredData.personal.department = departmentMatch[1].trim();
+    const departmentPatterns = [
+      /(?:department|division|section|unit|branch|team)\s*:?\s*([^\n]+)/i,
+      /(?:under|reports\s+to|supervised\s+by)\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of departmentPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].trim()) {
+        structuredData.personal.department = match[1].trim();
+        break;
+      }
+    }
+
+    // Enhanced contact information
+    const contactPatterns = [
+      /(?:phone|telephone|mobile|cell|contact)\s*(?:number|no|#)\s*:?\s*([^\n]+)/i,
+      /(?:email|e-mail|mail)\s*:?\s*([^\n]+)/i,
+      /(?:fax|facsimile)\s*:?\s*([^\n]+)/i,
+      /(?:website|web|url|www)\s*:?\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of contactPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].trim()) {
+        const field = pattern.source.includes('phone') ? 'phone' : 
+                     pattern.source.includes('email') ? 'email' : 
+                     pattern.source.includes('fax') ? 'fax' : 'website';
+        structuredData.contact[field] = match[1].trim();
+      }
     }
 
     // Extract financial information
@@ -2744,11 +2819,16 @@ export class FileProcessingService {
             structuredData.financial.allowances = {};
           }
           structuredData.financial.allowances[field] = amount;
-        } else if (field.includes('deduction') || field.includes('tax')) {
+        } else if (field.includes('deduction') || field.includes('tax') || field.includes('fee') || field.includes('charge')) {
           if (!structuredData.financial.deductions) {
             structuredData.financial.deductions = {};
           }
           structuredData.financial.deductions[field] = amount;
+        } else if (field.includes('rate') || field.includes('price') || field.includes('cost')) {
+          if (!structuredData.financial.rates) {
+            structuredData.financial.rates = {};
+          }
+          structuredData.financial.rates[field] = amount;
         } else {
           if (!structuredData.amounts) {
             structuredData.amounts = {};
@@ -2758,52 +2838,113 @@ export class FileProcessingService {
       }
     }
 
-    // Extract dates
+    // Enhanced date extraction
     const datePatterns = [
-      /(?:date|month|year|period)\s*:?\s*([^\n]+)/gi,
+      /(?:date|month|year|period|issued|created|generated|effective|expiry|due|valid|from|to)\s*:?\s*([^\n]+)/gi,
       /(\d{1,2}\/\d{1,2}\/\d{4})/g,
-      /(\d{4}-\d{2}-\d{2})/g
+      /(\d{4}-\d{2}-\d{2})/g,
+      /(\d{1,2}-\d{1,2}-\d{4})/g,
+      /(\d{1,2}\.\d{1,2}\.\d{4})/g,
+      /(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}/gi
     ];
     
     for (const pattern of datePatterns) {
       const matches = text.matchAll(pattern);
       for (const match of matches) {
-        if (!structuredData.dates) {
-          structuredData.dates = [];
+        if (match[1] && !structuredData.dates.includes(match[1].trim())) {
+          structuredData.dates.push(match[1].trim());
         }
-        structuredData.dates.push(match[1].trim());
       }
     }
 
-    // Extract identifiers (PAN, account numbers, etc.)
+    // Enhanced identifier extraction
     const identifierPatterns = [
-      /(?:pan|account|account\s+no|bank\s+account)\s*:?\s*([^\n]+)/gi,
-      /([A-Z0-9]{10,})/g
+      /(?:pan|account|account\s+no|bank\s+account|routing|swift|iban|credit\s+card|debit\s+card)\s*:?\s*([^\n]+)/gi,
+      /(?:ssn|social\s+security|tax\s+id|ein|tin|gst|vat|registration\s+no)\s*:?\s*([^\n]+)/gi,
+      /([A-Z0-9]{10,})/g,
+      /([A-Z]{2}\d{2}[A-Z0-9]{4,})/g // Format like AB12CD34
     ];
     
     for (const pattern of identifierPatterns) {
       const matches = text.matchAll(pattern);
       for (const match of matches) {
-        if (!structuredData.identifiers) {
-          structuredData.identifiers = [];
+        if (match[1] && !structuredData.identifiers.includes(match[1].trim())) {
+          structuredData.identifiers.push(match[1].trim());
         }
-        structuredData.identifiers.push(match[1].trim());
       }
     }
 
-    // Add metadata
+    // Extract location information
+    const locationPatterns = [
+      /(?:location|place|venue|site|branch|office)\s*:?\s*([^\n]+)/i,
+      /(?:city|state|province|country|zip|postal\s+code)\s*:?\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of locationPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].trim()) {
+        const field = pattern.source.includes('city') ? 'city' : 
+                     pattern.source.includes('state') ? 'state' : 
+                     pattern.source.includes('country') ? 'country' : 
+                     pattern.source.includes('zip') ? 'postalCode' : 'address';
+        structuredData.location[field] = match[1].trim();
+      }
+    }
+
+    // Extract reference numbers and notes
+    const referencePatterns = [
+      /(?:reference|ref|case|file|order|tracking|invoice|receipt|bill)\s*(?:number|no|#)\s*:?\s*([^\n]+)/gi,
+      /(?:note|remark|comment|description|details)\s*:?\s*([^\n]+)/gi
+    ];
+    
+    for (const pattern of referencePatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        if (match[1] && match[1].trim()) {
+          if (pattern.source.includes('reference') || pattern.source.includes('case') || pattern.source.includes('order')) {
+            if (!structuredData.references.includes(match[1].trim())) {
+              structuredData.references.push(match[1].trim());
+            }
+          } else {
+            if (!structuredData.notes.includes(match[1].trim())) {
+              structuredData.notes.push(match[1].trim());
+            }
+          }
+        }
+      }
+    }
+
+    // Extract status and terms
+    const statusPatterns = [
+      /(?:status|state|condition|phase|stage)\s*:?\s*([^\n]+)/i,
+      /(?:priority|urgency|importance)\s*:?\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of statusPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].trim()) {
+        const field = pattern.source.includes('status') ? 'current' : 
+                     pattern.source.includes('priority') ? 'priority' : 'condition';
+        structuredData.status[field] = match[1].trim();
+      }
+    }
+
+    // Enhanced metadata
     structuredData.metadata = {
-      extractionMethod: 'generic_intelligent_parser',
-      confidence: 0.85,
+      extractionMethod: 'enhanced_generic_intelligent_parser',
+      confidence: 0.90,
       detectedStructure: 'generic_document',
       documentType: 'auto_detected',
       extractedFields: Object.keys(structuredData).filter(key => 
         key !== 'metadata' && 
         structuredData[key] && 
-        Object.keys(structuredData[key]).length > 0
+        (Array.isArray(structuredData[key]) ? structuredData[key].length > 0 : Object.keys(structuredData[key]).length > 0)
       ),
       hasStructuredFormat: true,
-      isGenericParser: true
+      isGenericParser: true,
+      parserVersion: '2.0',
+      supportsMultipleDocumentTypes: true,
+      extractionTimestamp: new Date().toISOString()
     };
 
     return structuredData;

@@ -23,14 +23,7 @@ import { DataSource } from 'typeorm';
     }),
     TypeOrmModule.forRootAsync({
       useFactory: () => {
-        console.log('🔧 Configuring database connection...');
-        console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
-        console.log('MYSQL_URL exists:', !!process.env.MYSQL_URL);
-        console.log('MYSQLHOST:', process.env.MYSQLHOST);
-        console.log('MYSQLUSER:', process.env.MYSQLUSER);
-        console.log('MYSQLDATABASE:', process.env.MYSQLDATABASE);
-        console.log('RAILWAY_PRIVATE_DOMAIN:', process.env.RAILWAY_PRIVATE_DOMAIN);
-        console.log('RAILWAY_TCP_PROXY_DOMAIN:', process.env.RAILWAY_TCP_PROXY_DOMAIN);
+
         
         // Base configuration with only valid MySQL2 options
         const config = {
