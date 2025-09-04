@@ -127,8 +127,26 @@ async function bootstrap() {
     // Don't exit - let the health check server keep running
     // This ensures Railway can always reach /healthz
     console.log('🔄 Health check server will continue running for Railway');
+    
+    // Keep the process alive
+    setInterval(() => {
+      console.log('💓 Health check server is still running...');
+    }, 30000); // Log every 30 seconds
   }
 }
+
+// Global error handler to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.log('⚠️ But health check server is still running for Railway');
+  // Don't exit - keep the health check server running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.log('⚠️ But health check server is still running for Railway');
+  // Don't exit - keep the health check server running
+});
 
 bootstrap().catch(error => {
   console.error('❌ Bootstrap failed:', error);

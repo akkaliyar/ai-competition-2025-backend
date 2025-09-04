@@ -31,24 +31,21 @@ import { BillData } from './entities/bill-data.entity';
         console.log('RAILWAY_PRIVATE_DOMAIN:', process.env.RAILWAY_PRIVATE_DOMAIN);
         console.log('RAILWAY_TCP_PROXY_DOMAIN:', process.env.RAILWAY_TCP_PROXY_DOMAIN);
         
+        // Base configuration with only valid MySQL2 options
         const config = {
           type: 'mysql' as const,
           entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData],
           synchronize: false,
-          logging: false, // Disable logging to reduce noise
+          logging: false,
           charset: 'utf8mb4',
           timezone: '+00:00',
-          connectTimeout: 30000,    // Increased timeout for Railway
-          acquireTimeout: 30000,    // Increased timeout for Railway
-          timeout: 30000,           // Increased timeout for Railway
-          retryAttempts: 5,         // Increased retries for Railway
-          retryDelay: 3000,         // Increased delay for Railway
+          // Only use valid MySQL2 connection options
+          connectTimeout: 30000,
+          acquireTimeout: 30000,
+          timeout: 30000,
+          retryAttempts: 5,
+          retryDelay: 3000,
           maxQueryExecutionTime: 30000,
-          // Remove invalid MySQL2 options that cause warnings
-          extra: {
-            connectionLimit: 10,
-            reconnect: true,
-          }
         };
 
         // Priority 1: Use DATABASE_URL if provided (Railway style)
