@@ -2,6 +2,19 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import * as http from 'http';
+import * as net from 'net';
+
+// Simple port availability check
+const isPortAvailable = (port: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(port, '0.0.0.0', () => {
+      server.once('close', () => resolve(true));
+      server.close();
+    });
+    server.on('error', () => resolve(false));
+  });
+};
 
 // Create a simple HTTP server immediately for health checks
 const createHealthCheckServer = (port: number) => {
@@ -71,11 +84,11 @@ async function bootstrap() {
   let maxPortAttempts = 20; // Increased from 5 to 20
   let currentAttempt = 0;
   
-  // Ports to try in order (avoiding common conflicts)
+  // Ports to try in order (avoiding common conflicts and using safer ranges)
   const portSequence = [
-    8080, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, // Removed 8081 to avoid conflict with health server
-    8090, 8091, 8092, 8093, 8094, 8095, 8096, 8097, 8098, 8099,
-    9000, 9001, 9002, 9003, 9004, 9005, 9006, 9007, 9008, 9009
+    8080, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, // Main app ports (avoid 8081 for health server)
+    8090, 8091, 8092, 8093, 8094, 8095, 8096, 8097, 8098, 8099, // Extended range
+    9001, 9002, 9003, 9004, 9005, 9006, 9007, 9008, 9009 // Avoid 9000 as it's commonly used
   ];
 
   // Start health check server immediately - THIS IS CRITICAL FOR RAILWAY
@@ -139,6 +152,15 @@ async function bootstrap() {
       try {
         // Use the port sequence for better port selection
         const currentPort = portSequence[currentAttempt] || (port + currentAttempt);
+        
+        // Check if port is available before trying to use it
+        const portAvailable = await isPortAvailable(currentPort);
+        if (!portAvailable) {
+          console.log(`⚠️ Port ${currentPort} is not available, skipping...`);
+          currentAttempt++;
+          continue;
+        }
+        
         console.log(`🔌 Attempting to start on port ${currentPort} (attempt ${currentAttempt + 1}/${maxPortAttempts})`);
         
         await app.listen(currentPort, '0.0.0.0');
@@ -156,6 +178,7 @@ async function bootstrap() {
           const newHealthServer = createHealthCheckServer(newPort);
           Object.assign(healthServer, newHealthServer);
         } else {
+          console.error(`❌ Non-port error occurred:`, error.message);
           throw error; // Re-throw non-port related errors
         }
       }

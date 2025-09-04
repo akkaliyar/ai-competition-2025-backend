@@ -171,7 +171,7 @@ const server = http.createServer((req, res) => {
 
 // Get port from environment or use default
 // Use HEALTH_PORT to avoid conflict with main app
-const port = process.env.HEALTH_PORT || 8081;
+const port = process.env.HEALTH_PORT || 3001; // Changed from 8081 to 3001 to avoid conflicts
 
 // Start server with error handling
 server.listen(port, '0.0.0.0', () => {
