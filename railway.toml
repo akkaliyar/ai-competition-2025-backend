@@ -23,6 +23,7 @@ startPeriod = 15
 NODE_ENV = "production"
 SERVICE_TYPE = "backend"
 PORT = "8080"
+HEALTH_PORT = "8081"  # Health server port (separate from main app)
 
 # Database variables should be set manually in Railway dashboard
 # See RAILWAY_ENV_SETUP.md for instructions

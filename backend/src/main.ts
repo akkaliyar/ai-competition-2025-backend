@@ -73,7 +73,7 @@ async function bootstrap() {
   
   // Ports to try in order (avoiding common conflicts)
   const portSequence = [
-    8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089,
+    8080, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, // Removed 8081 to avoid conflict with health server
     8090, 8091, 8092, 8093, 8094, 8095, 8096, 8097, 8098, 8099,
     9000, 9001, 9002, 9003, 9004, 9005, 9006, 9007, 9008, 9009
   ];
@@ -193,7 +193,20 @@ async function bootstrap() {
 
     // Close the simple health check server since NestJS is now running
     healthServer.close(() => {
-      console.log('🔄 Health check server closed, NestJS is now handling requests');
+      // Health check server closed
+    });
+
+    // Graceful shutdown handling
+    process.on('SIGTERM', async () => {
+      await app.close();
+      healthServer.close();
+      process.exit(0);
+    });
+
+    process.on('SIGINT', async () => {
+      await app.close();
+      healthServer.close();
+      process.exit(0);
     });
 
     console.log(`🔗 Health check available at: http://0.0.0.0:${port}/health`);
@@ -201,21 +214,6 @@ async function bootstrap() {
     console.log(`🔗 Status endpoint at: http://0.0.0.0:${port}/status`);
     console.log(`🔗 Ping endpoint at: http://0.0.0.0:${port}/ping`);
     console.log(`🔗 API endpoints at: http://0.0.0.0:${port}/api/files`);
-
-    // Graceful shutdown handling
-    process.on('SIGTERM', async () => {
-      console.log('🔄 SIGTERM received, shutting down gracefully...');
-      await app.close();
-      healthServer.close();
-      process.exit(0);
-    });
-
-    process.on('SIGINT', async () => {
-      console.log('🔄 SIGINT received, shutting down gracefully...');
-      await app.close();
-      healthServer.close();
-      process.exit(0);
-    });
 
   } catch (error) {
     console.error('❌ Failed to start AI CRM Backend:', error);
@@ -225,25 +223,20 @@ async function bootstrap() {
 
     // Keep the health check server running even if NestJS fails
     process.on('SIGTERM', () => {
-      console.log('🔄 SIGTERM received, shutting down health check server...');
       healthServer.close();
       process.exit(0);
     });
 
     process.on('SIGINT', () => {
-      console.log('🔄 SIGINT received, shutting down health check server...');
       healthServer.close();
       process.exit(0);
     });
 
     // This ensures Railway can always reach /healthz
-    console.log('🔄 Health check server will continue running for Railway');
-    console.log('🔄 API endpoints are available with fallback responses');
-
     // Keep the process alive
     setInterval(() => {
-      console.log('💓 Health check server is still running...');
-    }, 30000); // Log every 30 seconds
+      // Log every 30 seconds
+    }, 30000);
   }
 }
 

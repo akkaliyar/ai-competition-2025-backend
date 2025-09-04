@@ -34,7 +34,11 @@ const startMainApp = () => {
     mainAppProcess = spawn('node', ['./dist/main.js'], { 
       stdio: 'inherit',
       shell: true,
-      env: { ...process.env }
+      env: { 
+        ...process.env,
+        PORT: process.env.PORT || 8080,  // Ensure main app uses PORT, not HEALTH_PORT
+        HEALTH_PORT: process.env.HEALTH_PORT || 8081  // Health server port
+      }
     });
     
     mainAppProcess.on('spawn', () => {
@@ -166,7 +170,8 @@ const server = http.createServer((req, res) => {
 });
 
 // Get port from environment or use default
-const port = process.env.PORT || 8080;
+// Use HEALTH_PORT to avoid conflict with main app
+const port = process.env.HEALTH_PORT || 8081;
 
 // Start server with error handling
 server.listen(port, '0.0.0.0', () => {
@@ -188,7 +193,8 @@ server.on('error', (error) => {
   
   if (error.code === 'EADDRINUSE') {
     console.log('⚠️ Port is in use, trying alternative port...');
-    const altPort = port + 1;
+    // Use a port that won't conflict with main app (8080, 8082-8089)
+    const altPort = 8082; // Skip 8080 (main app) and 8081 (current health port)
     
     server.listen(altPort, '0.0.0.0', () => {
       console.log(`✅ Health check server started on alternative port ${altPort}`);

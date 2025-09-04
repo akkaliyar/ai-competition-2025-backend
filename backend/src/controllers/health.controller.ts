@@ -7,60 +7,32 @@ export class HealthController {
   constructor(private dataSource: DataSource) {}
 
   @Get('healthz')
-  @HttpCode(HttpStatus.OK)
-  healthz(@Res() res: Response) {
-    // Railway health check - ALWAYS return 200 OK
-    console.log('🔍 Railway health check (Controller) - SUCCESS');
-    res.status(200).send('OK');
+  getHealthz(): string {
+    return 'OK';
   }
 
   @Get('health')
-  @HttpCode(HttpStatus.OK)
-  async health(@Res() res: Response) {
+  async getHealth(): Promise<any> {
     try {
-      // Check database connection
-      const isConnected = this.dataSource.isInitialized;
+      // Test database connection with a simple query
+      const result = await this.dataSource.query('SELECT 1 as test');
       
-      if (isConnected) {
-        // Test actual database query
-        try {
-          const result = await this.dataSource.query('SELECT 1 as test, NOW() as timestamp');
-          console.log('✅ Database query test successful:', result);
-          
-          res.status(200).json({
-            status: 'ok',
-            timestamp: new Date().toISOString(),
-            database: 'connected_and_working',
-            message: 'Service is healthy and database is responding',
-            dbTest: result[0]
-          });
-        } catch (dbError) {
-          console.error('❌ Database query failed:', dbError);
-          res.status(503).json({
-            status: 'degraded',
-            timestamp: new Date().toISOString(),
-            database: 'connected_but_query_failed',
-            message: 'Service is running but database queries are failing',
-            error: dbError.message
-          });
-        }
-      } else {
-        res.status(503).json({
-          status: 'degraded',
-          timestamp: new Date().toISOString(),
-          database: 'disconnected',
-          message: 'Service is running but database is not connected'
-        });
-      }
-    } catch (error) {
-      console.error('Health check error:', error);
-      res.status(503).json({
-        status: 'degraded',
+      return {
+        status: 'healthy',
+        database: 'connected',
         timestamp: new Date().toISOString(),
-        database: 'error',
-        message: 'Service is running but database check failed',
-        error: error.message
-      });
+        uptime: process.uptime(),
+        memory: process.memoryUsage()
+      };
+    } catch (dbError) {
+      return {
+        status: 'degraded',
+        database: 'disconnected',
+        error: dbError.message,
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage()
+      };
     }
   }
 

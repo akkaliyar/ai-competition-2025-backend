@@ -53,8 +53,6 @@ import { DataSource } from 'typeorm';
 
         // Priority 1: Use DATABASE_URL if provided (Railway style)
         if (process.env.DATABASE_URL) {
-          console.log('📡 Using DATABASE_URL for connection');
-          console.log('📡 DATABASE_URL value:', process.env.DATABASE_URL.replace(/:[^:@]*@/, ':****@')); // Hide password
           return {
             ...config,
             url: process.env.DATABASE_URL,
@@ -63,8 +61,6 @@ import { DataSource } from 'typeorm';
         
         // Priority 2: Use MYSQL_URL if provided (Railway MySQL)
         if (process.env.MYSQL_URL) {
-          console.log('📡 Using MYSQL_URL for connection');
-          console.log('📡 MYSQL_URL value:', process.env.MYSQL_URL.replace(/:[^:@]*@/, ':****@')); // Hide password
           return {
             ...config,
             url: process.env.MYSQL_URL,
@@ -73,11 +69,6 @@ import { DataSource } from 'typeorm';
         
         // Priority 3: Use Railway MySQL environment variables
         if (process.env.MYSQLHOST && process.env.MYSQLUSER && process.env.MYSQLDATABASE) {
-          console.log('📡 Using Railway MySQL variables for connection');
-          console.log('📡 Host:', process.env.MYSQLHOST);
-          console.log('📡 Port:', process.env.MYSQLPORT || 3306);
-          console.log('📡 User:', process.env.MYSQLUSER);
-          console.log('📡 Database:', process.env.MYSQLDATABASE);
           return {
             ...config,
             host: process.env.MYSQLHOST,
@@ -90,8 +81,6 @@ import { DataSource } from 'typeorm';
         
         // Priority 4: Use MYSQL_PUBLIC_URL if provided
         if (process.env.MYSQL_PUBLIC_URL) {
-          console.log('📡 Using MYSQL_PUBLIC_URL for connection');
-          console.log('📡 MYSQL_PUBLIC_URL value:', process.env.MYSQL_PUBLIC_URL.replace(/:[^:@]*@/, ':****@')); // Hide password
           return {
             ...config,
             url: process.env.MYSQL_PUBLIC_URL,
@@ -100,9 +89,6 @@ import { DataSource } from 'typeorm';
         
         // Priority 5: Use Railway TCP Proxy (for external connections)
         if (process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT) {
-          console.log('📡 Using Railway TCP Proxy for connection');
-          console.log('📡 Proxy Domain:', process.env.RAILWAY_TCP_PROXY_DOMAIN);
-          console.log('📡 Proxy Port:', process.env.RAILWAY_TCP_PROXY_PORT);
           return {
             ...config,
             host: process.env.RAILWAY_TCP_PROXY_DOMAIN,
@@ -114,11 +100,6 @@ import { DataSource } from 'typeorm';
         }
         
         // Fallback to individual environment variables (local development)
-        console.log('📡 Using individual DB variables for connection (local dev)');
-        console.log('📡 Host:', process.env.DB_HOST || 'localhost');
-        console.log('📡 Port:', process.env.DB_PORT || 3306);
-        console.log('📡 User:', process.env.DB_USERNAME || 'root');
-        console.log('📡 Database:', process.env.DB_NAME || 'ai_crm');
         return {
           ...config,
           host: process.env.DB_HOST || 'localhost',
@@ -138,42 +119,33 @@ export class AppModule implements OnModuleInit {
   constructor(private dataSource: DataSource) {}
 
   async onModuleInit() {
-    console.log('🚀 AppModule initialized, setting up database...');
-    
     try {
       // Wait a bit for database connection to be ready
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       if (this.dataSource.isInitialized) {
-        console.log('✅ Database connection is ready');
-        
         // Force database synchronization
-        console.log('🔧 Forcing database synchronization...');
         await this.dataSource.synchronize(true);
-        console.log('✅ Database synchronization completed');
         
         // Verify tables exist
         const tables = await this.dataSource.query('SHOW TABLES');
         const tableNames = tables.map(t => Object.values(t)[0]);
-        console.log('📋 Available tables after sync:', tableNames);
         
         // Check if our required tables exist
         const requiredTables = ['parsed_files', 'file_metadata', 'ocr_results', 'table_extractions', 'bill_data'];
         const missingTables = requiredTables.filter(table => !tableNames.includes(table));
         
         if (missingTables.length > 0) {
-          console.log('❌ Still missing tables:', missingTables);
-          console.log('💡 Database synchronization may have failed');
+          // Database synchronization may have failed
         } else {
-          console.log('✅ All required tables are now available!');
+          // All required tables are now available!
         }
         
       } else {
-        console.log('❌ Database connection not ready');
+        // Database connection not ready
       }
     } catch (error) {
-      console.error('❌ Database setup failed:', error.message);
-      console.log('💡 App will continue but database operations may fail');
+      // App will continue but database operations may fail
     }
   }
 }
