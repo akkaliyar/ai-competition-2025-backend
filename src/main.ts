@@ -31,10 +31,11 @@ async function bootstrap() {
   // Health endpoints are handled by HealthController
 
     // Start server on configured port
-    const port = process.env.PORT ? Number(process.env.PORT) : 3001;
+    const port = process.env.PORT ? Number(process.env.PORT) : 8080;
     await app.listen(port, '0.0.0.0');
     console.log(`✅ AI CRM Backend successfully started on port ${port}`);
     console.log(`🔗 Health check available at: http://0.0.0.0:${port}/health`);
+    console.log(`🔗 Railway health check at: http://0.0.0.0:${port}/healthz`);
   } catch (error) {
     console.error('❌ Failed to start AI CRM Backend:', error);
     process.exit(1);

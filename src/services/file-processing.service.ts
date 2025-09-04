@@ -7,6 +7,7 @@ import { FileMetadata } from '../entities/file-metadata.entity';
 import { TableExtraction } from '../entities/table-extraction.entity';
 import { GoogleVisionService } from './google-vision.service';
 import { ImagePreprocessingService } from './image-preprocessing.service';
+import { BillExtractionService } from './bill-extraction.service';
 import * as Tesseract from 'tesseract.js';
 import * as pdfParse from 'pdf-parse';
 import * as XLSX from 'xlsx';
@@ -31,6 +32,7 @@ export class FileProcessingService {
     private tableExtractionRepository: Repository<TableExtraction>,
     private googleVisionService: GoogleVisionService,
     private imagePreprocessingService: ImagePreprocessingService,
+    private billExtractionService: BillExtractionService,
   ) {}
 
   async processFile(file: Express.Multer.File, requestInfo?: { userAgent?: string; ip?: string; sessionId?: string }): Promise<ParsedFile> {
@@ -158,6 +160,17 @@ export class FileProcessingService {
       }
 
       const finalFile = await this.parsedFileRepository.save(savedFile);
+      
+      // Extract and store bill data automatically
+      try {
+        console.log('🔍 Starting automatic bill data extraction...');
+        await this.billExtractionService.extractAndStoreBillData(finalFile);
+        console.log('✅ Bill data extraction completed successfully');
+      } catch (billError) {
+        console.warn('⚠️ Bill data extraction failed, but file processing succeeded:', billError.message);
+        // Don't fail the entire process if bill extraction fails
+      }
+      
       // File processing completed in ${endTime - startTime}ms
       // === Processing Complete ===
       
@@ -2438,7 +2451,7 @@ export class FileProcessingService {
     // Check if this is a payslip document
     if (this.isPayslipDocument(extractedText)) {
       console.log('💰 Detected payslip document in image, using specialized parser...');
-      return await this.createPayslipStructuredData(extractedText, 'image');
+      return await this.createGenericStructuredData(extractedText, 'image');
     }
 
     const lines = extractedText.split('\n').filter(line => line.trim().length > 0);
@@ -2505,7 +2518,7 @@ export class FileProcessingService {
     // Check if this is a payslip document
     if (this.isPayslipDocument(extractedText)) {
       console.log('💰 Detected payslip document, using specialized parser...');
-      return await this.createPayslipStructuredData(extractedText, 'pdf');
+      return await this.createGenericStructuredData(extractedText, 'pdf');
     }
     
     // Regular table analysis for other PDFs
@@ -2582,67 +2595,377 @@ export class FileProcessingService {
     return keywordMatches.length >= 5; // At least 5 keywords to be considered a payslip
   }
 
-  private async createPayslipStructuredData(text: string, originalFileType?: string): Promise<any> {
-    console.log(`💰 Creating structured payslip data from ${originalFileType || 'unknown'} file...`);
+  private async createGenericStructuredData(text: string, originalFileType?: string): Promise<any> {
+    console.log(`🔍 Creating generic structured data from ${originalFileType || 'unknown'} file...`);
     
     const lines = text.split('\n').filter(line => line.trim().length > 0);
     
-    // Extract employee details (key-value pairs)
-    const employeeDetails = this.extractPayslipEmployeeDetails(lines);
+    // Extract structured data using generic approach
+    const structuredData = this.extractGenericStructuredData(text, lines);
     
-    // Extract earnings/deductions table
-    const earningsTable = this.extractPayslipEarningsTable(lines);
-    
-    // Extract summary information
-    const summaryInfo = this.extractPayslipSummary(lines);
+    // Create generic table format
+    const genericTable = this.createGenericTableFromText(text, lines);
     
     return {
       fileType: originalFileType || 'generic',
       processedAt: new Date().toISOString(),
       hasStructuredData: true,
-      tableCount: 2,
-      totalRows: (employeeDetails.length + earningsTable.length + (summaryInfo ? 1 : 0)),
-      totalColumns: 4,
-      tables: [
-        {
-          id: 'employee_details',
-          name: 'Employee Details',
-          headers: ['Field', 'Value', 'Category', 'Notes'],
-          data: employeeDetails,
-          rowCount: employeeDetails.length,
-          columnCount: 4,
-          confidence: 0.95,
-          source: 'payslip_parsing'
-        },
-        {
-          id: 'earnings_deductions',
-          name: 'Earnings & Deductions',
-          headers: ['Head', 'Current Month Earning', 'Current Month Deduction', 'April To Date Earning', 'April To Date Deduction'],
-          data: earningsTable,
-          rowCount: earningsTable.length,
-          columnCount: 5,
-          confidence: 0.9,
-          source: 'payslip_parsing'
-        },
-        ...(summaryInfo ? [{
-          id: 'summary_info',
-          name: 'Summary Information',
-          headers: ['Field', 'Value'],
-          data: [summaryInfo],
-          rowCount: 1,
-          columnCount: 2,
-          confidence: 0.95,
-          source: 'payslip_parsing'
-        }] : [])
-      ],
+      tableCount: genericTable.length,
+      totalRows: genericTable.reduce((sum, table) => sum + table.rowCount, 0),
+      totalColumns: Math.max(...genericTable.map(table => table.columnCount), 0),
+      // New generic structured format
+      structuredPayslipData: structuredData, // Keep this for backward compatibility
+      // Generic table format
+      tables: genericTable,
       metadata: {
-        extractionMethod: 'payslip_specialized_parser',
-        confidence: 0.92,
-        detectedStructure: 'payslip',
-        documentType: 'payslip',
-        sections: ['employee_details', 'earnings_deductions', 'summary']
+        extractionMethod: 'generic_intelligent_parser',
+        confidence: 0.85,
+        detectedStructure: 'generic_document',
+        documentType: 'auto_detected',
+        sections: genericTable.map(table => table.id),
+        hasStructuredFormat: true,
+        isGenericParser: true
       }
     };
+  }
+
+  private extractGenericStructuredData(text: string, lines: string[]): any {
+    const structuredData: any = {
+      document: {},
+      company: {},
+      personal: {},
+      financial: {},
+      dates: {},
+      identifiers: {},
+      amounts: {},
+      metadata: {}
+    };
+
+    // Extract company/organization information
+    const companyMatch = text.match(/^([^\n]+)/);
+    if (companyMatch) {
+      structuredData.company.name = companyMatch[1].trim();
+    }
+
+    const addressMatch = text.match(/^[^\n]+\n([^\n]+)/);
+    if (addressMatch) {
+      structuredData.company.address = addressMatch[1].trim();
+    }
+
+    // Extract document type and period
+    const documentTypeMatch = text.match(/(payslip|invoice|bill|receipt|statement|report)\s+(?:for\s+the\s+)?(?:month\s+of\s+)?([^\n]+)/i);
+    if (documentTypeMatch) {
+      structuredData.document.type = documentTypeMatch[1].toLowerCase();
+      structuredData.document.period = documentTypeMatch[2].trim();
+    }
+
+    // Extract personal information (name, code, designation, etc.)
+    const namePatterns = [
+      /(?:employee|customer|client|name)\s*:?\s*([^\n]+)/i,
+      /(?:name)\s*:?\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of namePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        structuredData.personal.name = match[1].trim();
+        break;
+      }
+    }
+
+    const codePatterns = [
+      /(?:employee|customer|client|account|id)\s*(?:code|number|id)\s*:?\s*([^\n]+)/i,
+      /(?:code|number|id)\s*:?\s*([^\n]+)/i
+    ];
+    
+    for (const pattern of codePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        structuredData.personal.code = match[1].trim();
+        break;
+      }
+    }
+
+    const designationMatch = text.match(/(?:designation|title|position|role)\s*:?\s*([^\n]+)/i);
+    if (designationMatch) {
+      structuredData.personal.designation = designationMatch[1].trim();
+    }
+
+    const departmentMatch = text.match(/(?:department|division|section)\s*:?\s*([^\n]+)/i);
+    if (departmentMatch) {
+      structuredData.personal.department = departmentMatch[1].trim();
+    }
+
+    // Extract financial information
+    const amountPattern = /([a-zA-Z\s]+)\s*([\d,]+\.?\d*)/gi;
+    const amountMatches = text.matchAll(amountPattern);
+    
+    for (const match of amountMatches) {
+      const field = match[1].trim().toLowerCase();
+      const amount = parseFloat(match[2].replace(/,/g, ''));
+      
+      if (!isNaN(amount)) {
+        if (field.includes('total') || field.includes('sum')) {
+          structuredData.financial.total = amount;
+        } else if (field.includes('net') || field.includes('salary') || field.includes('amount')) {
+          structuredData.financial.netAmount = amount;
+        } else if (field.includes('basic') || field.includes('base')) {
+          structuredData.financial.basic = amount;
+        } else if (field.includes('allowance') || field.includes('bonus')) {
+          if (!structuredData.financial.allowances) {
+            structuredData.financial.allowances = {};
+          }
+          structuredData.financial.allowances[field] = amount;
+        } else if (field.includes('deduction') || field.includes('tax')) {
+          if (!structuredData.financial.deductions) {
+            structuredData.financial.deductions = {};
+          }
+          structuredData.financial.deductions[field] = amount;
+        } else {
+          if (!structuredData.amounts) {
+            structuredData.amounts = {};
+          }
+          structuredData.amounts[field] = amount;
+        }
+      }
+    }
+
+    // Extract dates
+    const datePatterns = [
+      /(?:date|month|year|period)\s*:?\s*([^\n]+)/gi,
+      /(\d{1,2}\/\d{1,2}\/\d{4})/g,
+      /(\d{4}-\d{2}-\d{2})/g
+    ];
+    
+    for (const pattern of datePatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        if (!structuredData.dates) {
+          structuredData.dates = [];
+        }
+        structuredData.dates.push(match[1].trim());
+      }
+    }
+
+    // Extract identifiers (PAN, account numbers, etc.)
+    const identifierPatterns = [
+      /(?:pan|account|account\s+no|bank\s+account)\s*:?\s*([^\n]+)/gi,
+      /([A-Z0-9]{10,})/g
+    ];
+    
+    for (const pattern of identifierPatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        if (!structuredData.identifiers) {
+          structuredData.identifiers = [];
+        }
+        structuredData.identifiers.push(match[1].trim());
+      }
+    }
+
+    // Add metadata
+    structuredData.metadata = {
+      extractionMethod: 'generic_intelligent_parser',
+      confidence: 0.85,
+      detectedStructure: 'generic_document',
+      documentType: 'auto_detected',
+      extractedFields: Object.keys(structuredData).filter(key => 
+        key !== 'metadata' && 
+        structuredData[key] && 
+        Object.keys(structuredData[key]).length > 0
+      ),
+      hasStructuredFormat: true,
+      isGenericParser: true
+    };
+
+    return structuredData;
+  }
+
+  private extractStructuredPayslipData(text: string, lines: string[]): any {
+    const structuredData: any = {
+      employee: {},
+      payslip: {},
+      bank: {},
+      statutory: {},
+      earnings: {},
+      deductions: {},
+      netSalary: {}
+    };
+
+    // Extract company and address information
+    const companyMatch = text.match(/^([^\n]+)/);
+    if (companyMatch) {
+      structuredData.payslip.company = companyMatch[1].trim();
+    }
+
+    const addressMatch = text.match(/^[^\n]+\n([^\n]+)/);
+    if (addressMatch) {
+      structuredData.payslip.address = addressMatch[1].trim();
+    }
+
+    // Extract payslip month
+    const monthMatch = text.match(/payslip\s+for\s+the\s+month\s+of\s+([^\n]+)/i);
+    if (monthMatch) {
+      structuredData.payslip.month = monthMatch[1].trim();
+    }
+
+    // Extract employee details
+    const employeeNameMatch = text.match(/employee\s*name\s*([^\n]+)/i);
+    if (employeeNameMatch) {
+      structuredData.employee.name = employeeNameMatch[1].trim();
+    }
+
+    const employeeCodeMatch = text.match(/employee\s*code\s*([^\n]+)/i);
+    if (employeeCodeMatch) {
+      structuredData.employee.code = employeeCodeMatch[1].trim();
+    }
+
+    const designationMatch = text.match(/designation\s*([^\n]+)/i);
+    if (designationMatch) {
+      structuredData.employee.designation = designationMatch[1].trim();
+    }
+
+    const departmentMatch = text.match(/department\s*([^\n]+)/i);
+    if (departmentMatch) {
+      structuredData.employee.department = departmentMatch[1].trim();
+    }
+
+    const joiningDateMatch = text.match(/joining\s*date\s*([^\n]+)/i);
+    if (joiningDateMatch) {
+      structuredData.employee.joiningDate = joiningDateMatch[1].trim();
+    }
+
+    const locationMatch = text.match(/location\s*([^\n]+)/i);
+    if (locationMatch) {
+      structuredData.employee.location = locationMatch[1].trim();
+    }
+
+    // Extract payslip details
+    const payableDaysMatch = text.match(/payable\s*days\s*([^\n]+)/i);
+    if (payableDaysMatch) {
+      structuredData.payslip.payableDays = parseInt(payableDaysMatch[1].trim()) || 0;
+    }
+
+    const paidDaysMatch = text.match(/paid\s*days\s*([^\n]+)/i);
+    if (paidDaysMatch) {
+      structuredData.payslip.paidDays = parseInt(paidDaysMatch[1].trim()) || 0;
+    }
+
+    const arrearDaysMatch = text.match(/arrear\s*([^\n]+)/i);
+    if (arrearDaysMatch) {
+      structuredData.payslip.arrearDays = parseInt(arrearDaysMatch[1].trim()) || 0;
+    }
+
+    // Extract bank details
+    const bankNameMatch = text.match(/bank\s*name\s*([^\n]+)/i);
+    if (bankNameMatch) {
+      structuredData.bank.name = bankNameMatch[1].trim();
+    }
+
+    const bankAccountMatch = text.match(/bank\s*account\s*no\s*([^\n]+)/i);
+    if (bankAccountMatch) {
+      structuredData.bank.accountNo = bankAccountMatch[1].trim();
+    }
+
+    const panMatch = text.match(/pan\s*([^\n]+)/i);
+    if (panMatch) {
+      structuredData.bank.pan = panMatch[1].trim();
+    }
+
+    // Extract statutory details
+    const pfMatch = text.match(/provident\s*fund\s*no\s*([^\n]+)/i);
+    if (pfMatch) {
+      structuredData.statutory.providentFundNo = pfMatch[1].trim();
+    }
+
+    const uanMatch = text.match(/uan\s*([^\n]+)/i);
+    if (uanMatch) {
+      structuredData.statutory.uan = uanMatch[1].trim();
+    }
+
+    // Extract earnings
+    const basicMatch = text.match(/basic\s*([\d,]+\.?\d*)/i);
+    if (basicMatch) {
+      const amount = parseFloat(basicMatch[1].replace(/,/g, ''));
+      structuredData.earnings.basic = amount;
+    }
+
+    const hraMatch = text.match(/house\s*rent\s*allowance\s*([\d,]+\.?\d*)/i);
+    if (hraMatch) {
+      const amount = parseFloat(hraMatch[1].replace(/,/g, ''));
+      structuredData.earnings.houseRentAllowance = amount;
+    }
+
+    const conveyanceMatch = text.match(/conveyance\s*allowance\s*([\d,]+\.?\d*)/i);
+    if (conveyanceMatch) {
+      const amount = parseFloat(conveyanceMatch[1].replace(/,/g, ''));
+      structuredData.earnings.conveyanceAllowance = amount;
+    }
+
+    const medicalMatch = text.match(/medical\s*allowance\s*([\d,]+\.?\d*)/i);
+    if (medicalMatch) {
+      const amount = parseFloat(medicalMatch[1].replace(/,/g, ''));
+      structuredData.earnings.medicalAllowance = amount;
+    }
+
+    const specialMatch = text.match(/special\s*allowance\s*([\d,]+\.?\d*)/i);
+    if (specialMatch) {
+      const amount = parseFloat(specialMatch[1].replace(/,/g, ''));
+      structuredData.earnings.specialAllowance = amount;
+    }
+
+    const bonusMatch = text.match(/bonus\s*([\d,]+\.?\d*)/i);
+    if (bonusMatch) {
+      const amount = parseFloat(bonusMatch[1].replace(/,/g, ''));
+      structuredData.earnings.bonus = amount;
+    }
+
+    // Calculate total earnings
+    const totalEarnings = Object.values(structuredData.earnings)
+      .filter(val => typeof val === 'number')
+      .reduce((sum: number, val: any) => sum + val, 0);
+    structuredData.earnings.totalEarnings = totalEarnings;
+
+    // Extract deductions
+    const pfDeductionMatch = text.match(/provident\s*fund\s*0\.00\s*([\d,]+\.?\d*)/i);
+    if (pfDeductionMatch) {
+      const amount = parseFloat(pfDeductionMatch[1].replace(/,/g, ''));
+      structuredData.deductions.providentFund = amount;
+    }
+
+    const incomeTaxMatch = text.match(/income\s*tax\s*0\.00\s*([\d,]+\.?\d*)/i);
+    if (incomeTaxMatch) {
+      const amount = parseFloat(incomeTaxMatch[1].replace(/,/g, ''));
+      structuredData.deductions.incomeTax = amount;
+    }
+
+    // Calculate total deductions
+    const totalDeductions = Object.values(structuredData.deductions)
+      .filter(val => typeof val === 'number')
+      .reduce((sum: number, val: any) => sum + val, 0);
+    structuredData.deductions.totalDeductions = totalDeductions;
+
+    // Extract net salary
+    const netSalaryMatch = text.match(/net\s*salary\s*:\s*([\d,]+\.?\d*)/i);
+    if (netSalaryMatch) {
+      const amount = parseFloat(netSalaryMatch[1].replace(/,/g, ''));
+      structuredData.netSalary.amount = amount;
+    }
+
+    // Extract salary in words
+    const salaryWordsMatch = text.match(/Rs\.\s*([^)]+)/i);
+    if (salaryWordsMatch) {
+      structuredData.netSalary.inWords = salaryWordsMatch[1].trim();
+    }
+
+    // Clean up empty objects
+    Object.keys(structuredData).forEach(key => {
+      if (Object.keys(structuredData[key]).length === 0) {
+        delete structuredData[key];
+      }
+    });
+
+    return structuredData;
   }
 
   private extractPayslipEmployeeDetails(lines: string[]): any[] {
@@ -2684,56 +3007,37 @@ export class FileProcessingService {
   private async createExcelStructuredTableData(parsedContent: any, extractedText?: string): Promise<any> {
     if (!parsedContent.sheets) {
       return {
-        fileType: 'excel',
-        processedAt: new Date().toISOString(),
-        hasStructuredData: false,
-        tableCount: 0,
-        totalRows: 0,
-        totalColumns: 0,
-        error: 'No sheet data found'
+        type: 'spreadsheet',
+        sheets: {},
+        totalSheets: 0,
+        metadata: {
+          fileName: 'Unknown',
+          fileSize: 0,
+          sheetNames: [],
+          totalDataRows: 0,
+          processedAt: new Date().toISOString(),
+          error: 'No sheet data found'
+        }
       };
     }
 
     // Check if this is a payslip document (if we have extracted text)
     if (extractedText && this.isPayslipDocument(extractedText)) {
       console.log('💰 Detected payslip document in Excel, using specialized parser...');
-      return await this.createPayslipStructuredData(extractedText, 'excel');
+      return await this.createGenericStructuredData(extractedText, 'excel');
     }
 
-    const tables: any[] = [];
-    let totalRows = 0;
-    let totalColumns = 0;
-
-    Object.entries(parsedContent.sheets).forEach(([sheetName, sheetData]: [string, any]) => {
-      if (sheetData.data && Array.isArray(sheetData.data)) {
-        const headers = sheetData.headers || [];
-        const data = sheetData.data;
-        
-        tables.push({
-          id: `excel_${sheetName.toLowerCase()}`,
-          name: sheetName,
-          headers: headers,
-          data: data,
-          rowCount: data.length,
-          columnCount: headers.length,
-          confidence: 1.0,
-          source: 'excel_extraction'
-        });
-
-        totalRows += data.length;
-        totalColumns = Math.max(totalColumns, headers.length);
-      }
-    });
-
+    // Return the structure that the frontend expects
     return {
-      fileType: 'excel',
-      processedAt: new Date().toISOString(),
-      hasStructuredData: tables.length > 0,
-      tableCount: tables.length,
-      totalRows: totalRows,
-      totalColumns: totalColumns,
-      tables: tables,
+      type: 'spreadsheet',
+      sheets: parsedContent.sheets,
+      totalSheets: parsedContent.totalSheets || Object.keys(parsedContent.sheets).length,
       metadata: {
+        fileName: parsedContent.metadata?.fileName || 'Unknown',
+        fileSize: parsedContent.metadata?.fileSize || 0,
+        sheetNames: parsedContent.metadata?.sheetNames || Object.keys(parsedContent.sheets),
+        totalDataRows: parsedContent.metadata?.totalDataRows || 0,
+        processedAt: parsedContent.metadata?.processedAt || new Date().toISOString(),
         extractionMethod: 'xlsx',
         confidence: 1.0,
         detectedStructure: 'spreadsheet'
@@ -2745,7 +3049,7 @@ export class FileProcessingService {
     // Check if this is a payslip document
     if (extractedText && this.isPayslipDocument(extractedText)) {
       console.log('💰 Detected payslip document in generic file, using specialized parser...');
-      return await this.createPayslipStructuredData(extractedText, 'generic');
+      return await this.createGenericStructuredData(extractedText, 'generic');
     }
 
     const lines = extractedText ? extractedText.split('\n').filter(line => line.trim().length > 0) : [];
@@ -2872,5 +3176,199 @@ export class FileProcessingService {
       'Field': 'Summary',
       'Value': `Gross: ${grossPay}, Deductions: ${totalDeductions}, Net: ${netPay}`
     };
+  }
+
+  // New generic methods for flexible document processing
+  private detectDocumentType(text: string): string {
+    const lowerText = text.toLowerCase();
+    
+    // Document type detection based on keywords
+    const typePatterns = [
+      { type: 'payslip', keywords: ['payslip', 'salary', 'employee', 'earnings', 'deductions', 'basic', 'allowance'] },
+      { type: 'invoice', keywords: ['invoice', 'bill', 'amount due', 'total amount', 'tax', 'gst', 'vat'] },
+      { type: 'receipt', keywords: ['receipt', 'payment', 'transaction', 'merchant', 'store', 'shop'] },
+      { type: 'contract', keywords: ['contract', 'agreement', 'terms', 'conditions', 'party', 'signature'] },
+      { type: 'report', keywords: ['report', 'summary', 'analysis', 'data', 'statistics', 'findings'] }
+    ];
+
+    for (const pattern of typePatterns) {
+      const matchCount = pattern.keywords.filter(keyword => lowerText.includes(keyword)).length;
+      if (matchCount >= 3) {
+        return pattern.type;
+      }
+    }
+
+    return 'generic';
+  }
+
+  private createGenericTableFromText(text: string, lines: string[]): any[] {
+    const tables: any[] = [];
+    
+    // Create a generic key-value table
+    const keyValueData: any[] = [];
+    const keyValuePattern = /([a-zA-Z\s]+):\s*([^\n]+)/g;
+    const matches = text.matchAll(keyValuePattern);
+    
+    for (const match of matches) {
+      keyValueData.push({
+        'Field': match[1].trim(),
+        'Value': match[2].trim(),
+        'Type': this.detectFieldType(match[2].trim())
+      });
+    }
+
+    if (keyValueData.length > 0) {
+      tables.push({
+        id: 'extracted_fields',
+        name: 'Extracted Fields',
+        headers: ['Field', 'Value', 'Type'],
+        data: keyValueData,
+        rowCount: keyValueData.length,
+        columnCount: 3,
+        confidence: 0.8,
+        source: 'generic_extraction'
+      });
+    }
+
+    // Create a table for numeric data
+    const numericData: any[] = [];
+    const numericPattern = /([a-zA-Z\s]+)\s*([\d,]+\.?\d*)/gi;
+    const numericMatches = text.matchAll(numericPattern);
+    
+    for (const match of numericMatches) {
+      const amount = parseFloat(match[2].replace(/,/g, ''));
+      if (!isNaN(amount)) {
+        numericData.push({
+          'Field': match[1].trim(),
+          'Amount': amount,
+          'Formatted': match[2].trim()
+        });
+      }
+    }
+
+    if (numericData.length > 0) {
+      tables.push({
+        id: 'numeric_data',
+        name: 'Numeric Data',
+        headers: ['Field', 'Amount', 'Formatted'],
+        data: numericData,
+        rowCount: numericData.length,
+        columnCount: 3,
+        confidence: 0.9,
+        source: 'numeric_extraction'
+      });
+    }
+
+    // Create a table for dates
+    const dateData: any[] = [];
+    const datePattern = /(?:date|month|year|period)\s*:?\s*([^\n]+)/gi;
+    const dateMatches = text.matchAll(datePattern);
+    
+    for (const match of dateMatches) {
+      dateData.push({
+        'Type': 'Date/Period',
+        'Value': match[1].trim()
+      });
+    }
+
+    if (dateData.length > 0) {
+      tables.push({
+        id: 'date_data',
+        name: 'Date Information',
+        headers: ['Type', 'Value'],
+        data: dateData,
+        rowCount: dateData.length,
+        columnCount: 2,
+        confidence: 0.85,
+        source: 'date_extraction'
+      });
+    }
+
+    return tables;
+  }
+
+  private detectFieldType(value: string): string {
+    if (/^\d+$/.test(value)) return 'Number';
+    if (/^\d+\.\d+$/.test(value)) return 'Decimal';
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value) || /^\d{4}-\d{2}-\d{2}$/.test(value)) return 'Date';
+    if (/^[A-Z0-9]{10,}$/.test(value)) return 'ID/Code';
+    if (/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) return 'Email';
+    if (/^\+?[\d\s\-\(\)]+$/.test(value)) return 'Phone';
+    if (/^[\d,]+\.?\d*$/.test(value)) return 'Amount';
+    return 'Text';
+  }
+
+  private createPayslipSections(text: string): any {
+    // Dynamic payslip section creation based on detected content
+    const sections: any = {};
+    
+    // Auto-detect sections based on content patterns
+    if (text.match(/employee/i)) sections.employee = this.extractSectionData(text, 'employee');
+    if (text.match(/salary|earnings/i)) sections.earnings = this.extractSectionData(text, 'earnings');
+    if (text.match(/deduction|tax/i)) sections.deductions = this.extractSectionData(text, 'deductions');
+    if (text.match(/bank|account/i)) sections.bank = this.extractSectionData(text, 'bank');
+    
+    return sections;
+  }
+
+  private createInvoiceSections(text: string): any {
+    const sections: any = {};
+    
+    if (text.match(/customer|client/i)) sections.customer = this.extractSectionData(text, 'customer');
+    if (text.match(/item|product/i)) sections.items = this.extractSectionData(text, 'items');
+    if (text.match(/total|amount/i)) sections.totals = this.extractSectionData(text, 'totals');
+    
+    return sections;
+  }
+
+  private createReceiptSections(text: string): any {
+    const sections: any = {};
+    
+    if (text.match(/merchant|store/i)) sections.merchant = this.extractSectionData(text, 'merchant');
+    if (text.match(/item|product/i)) sections.items = this.extractSectionData(text, 'items');
+    if (text.match(/payment|total/i)) sections.payment = this.extractSectionData(text, 'payment');
+    
+    return sections;
+  }
+
+  private createGenericSections(text: string): any {
+    const sections: any = {};
+    
+    // Create sections based on detected content
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    
+    for (const line of lines) {
+      if (line.includes(':')) {
+        const [key, value] = line.split(':').map(s => s.trim());
+        if (key && value) {
+          const sectionName = key.toLowerCase().replace(/\s+/g, '_');
+          if (!sections[sectionName]) {
+            sections[sectionName] = [];
+          }
+          sections[sectionName].push({ key, value });
+        }
+      }
+    }
+    
+    return sections;
+  }
+
+  private extractSectionData(text: string, sectionName: string): any {
+    // Generic section data extraction
+    const sectionData: any = {};
+    const lines = text.split('\n');
+    
+    for (const line of lines) {
+      if (line.toLowerCase().includes(sectionName.toLowerCase())) {
+        const keyValueMatch = line.match(/([^:]+):\s*(.+)/);
+        if (keyValueMatch) {
+          const key = keyValueMatch[1].trim().toLowerCase().replace(/\s+/g, '_');
+          const value = keyValueMatch[2].trim();
+          sectionData[key] = value;
+        }
+      }
+    }
+    
+    return sectionData;
   }
 }

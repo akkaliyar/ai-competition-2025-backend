@@ -80,7 +80,7 @@ export class FileUploadController {
       // Starting file processing
       const result = await this.fileProcessingService.processFile(file, requestInfo);
       // File processing completed
-      
+      console.log(result);
       return {
         success: true,
         message: 'File processed successfully',
@@ -117,15 +117,31 @@ export class FileUploadController {
       
       return {
         success: true,
-        data: files.map(file => ({
-          id: file.id,
-          filename: file.filename,
-          originalName: file.originalName,
-          fileType: file.fileType,
-          fileSize: file.fileSize,
-          createdAt: file.createdAt,
-          updatedAt: file.updatedAt,
-        }))
+        data: files.map(file => {
+          const structuredTableData = file.structuredTableData ? JSON.parse(file.structuredTableData) : null;
+          return {
+            id: file.id,
+            filename: file.filename,
+            originalName: file.originalName,
+            fileType: file.fileType,
+            fileSize: file.fileSize,
+            mimeType: file.mimeType,
+            processingStatus: file.processingStatus,
+            processingDurationMs: file.processingDurationMs,
+            characterCount: file.characterCount,
+            wordCount: file.wordCount,
+            lineCount: file.lineCount,
+            hasStructuredData: file.hasStructuredData,
+            tableCount: file.tableCount,
+            averageConfidence: file.averageConfidence,
+            parsedContent: file.parsedContent ? JSON.parse(file.parsedContent) : null,
+            structuredTableData: structuredTableData,
+            structuredDocumentData: structuredTableData?.structuredPayslipData || null, // Backward compatibility
+            extractedText: file.extractedText,
+            createdAt: file.createdAt,
+            updatedAt: file.updatedAt,
+          };
+        })
       };
     } catch (error) {
       throw new BadRequestException(`Failed to retrieve files: ${error.message}`);
@@ -137,6 +153,8 @@ export class FileUploadController {
     try {
       const file = await this.fileProcessingService.getParsedFileById(id);
       
+      const structuredTableData = file.structuredTableData ? JSON.parse(file.structuredTableData) : null;
+      
       return {
         success: true,
         data: {
@@ -145,7 +163,18 @@ export class FileUploadController {
           originalName: file.originalName,
           fileType: file.fileType,
           fileSize: file.fileSize,
-          parsedContent: JSON.parse(file.parsedContent),
+          mimeType: file.mimeType,
+          processingStatus: file.processingStatus,
+          processingDurationMs: file.processingDurationMs,
+          characterCount: file.characterCount,
+          wordCount: file.wordCount,
+          lineCount: file.lineCount,
+          hasStructuredData: file.hasStructuredData,
+          tableCount: file.tableCount,
+          averageConfidence: file.averageConfidence,
+          parsedContent: file.parsedContent ? JSON.parse(file.parsedContent) : null,
+          structuredTableData: structuredTableData,
+          structuredDocumentData: structuredTableData?.structuredPayslipData || null, // Backward compatibility
           extractedText: file.extractedText,
           createdAt: file.createdAt,
           updatedAt: file.updatedAt,

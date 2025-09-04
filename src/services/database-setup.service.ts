@@ -10,11 +10,13 @@ export class DatabaseSetupService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Don't block app startup - run database setup in background
-    this.setupDatabase().catch(error => {
-      console.error('❌ Database setup failed:', error.message);
-      console.log('🚀 App will continue without database (health check will still work)');
-    });
+    // Don't block app startup - run database setup in background with delay
+    setTimeout(() => {
+      this.setupDatabase().catch(error => {
+        console.error('❌ Database setup failed:', error.message);
+        console.log('🚀 App will continue without database (health check will still work)');
+      });
+    }, 5000); // Wait 5 seconds after app starts before trying database
   }
 
   private async setupDatabase() {
