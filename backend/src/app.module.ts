@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { FileUploadController } from './controllers/file-upload.controller';
@@ -14,6 +14,7 @@ import { OcrResult } from './entities/ocr-result.entity';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { TableExtraction } from './entities/table-extraction.entity';
 import { BillData } from './entities/bill-data.entity';
+import { DataSource } from 'typeorm';
 
 @Module({
   imports: [
@@ -133,4 +134,46 @@ import { BillData } from './entities/bill-data.entity';
   controllers: [FileUploadController, HealthController, BillDataController],
   providers: [FileProcessingService, DatabaseSetupService, GoogleVisionService, ImagePreprocessingService, BillExtractionService],
 })
-export class AppModule {}
+export class AppModule implements OnModuleInit {
+  constructor(private dataSource: DataSource) {}
+
+  async onModuleInit() {
+    console.log('🚀 AppModule initialized, setting up database...');
+    
+    try {
+      // Wait a bit for database connection to be ready
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      if (this.dataSource.isInitialized) {
+        console.log('✅ Database connection is ready');
+        
+        // Force database synchronization
+        console.log('🔧 Forcing database synchronization...');
+        await this.dataSource.synchronize(true);
+        console.log('✅ Database synchronization completed');
+        
+        // Verify tables exist
+        const tables = await this.dataSource.query('SHOW TABLES');
+        const tableNames = tables.map(t => Object.values(t)[0]);
+        console.log('📋 Available tables after sync:', tableNames);
+        
+        // Check if our required tables exist
+        const requiredTables = ['parsed_files', 'file_metadata', 'ocr_results', 'table_extractions', 'bill_data'];
+        const missingTables = requiredTables.filter(table => !tableNames.includes(table));
+        
+        if (missingTables.length > 0) {
+          console.log('❌ Still missing tables:', missingTables);
+          console.log('💡 Database synchronization may have failed');
+        } else {
+          console.log('✅ All required tables are now available!');
+        }
+        
+      } else {
+        console.log('❌ Database connection not ready');
+      }
+    } catch (error) {
+      console.error('❌ Database setup failed:', error.message);
+      console.log('💡 App will continue but database operations may fail');
+    }
+  }
+}

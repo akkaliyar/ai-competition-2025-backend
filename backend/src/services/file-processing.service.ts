@@ -96,8 +96,23 @@ export class FileProcessingService {
     try {
       // Save initial record
       console.log('💾 Saving to database...');
+      console.log('🔍 Repository type:', typeof this.parsedFileRepository);
+      console.log('🔍 Repository methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(this.parsedFileRepository)));
+      
+      // Test if repository has save method
+      if (typeof this.parsedFileRepository.save !== 'function') {
+        throw new Error('Repository save method is not available!');
+      }
+      
       const savedFile = await this.parsedFileRepository.save(parsedFile);
       console.log('✅ Initial file record saved with ID:', savedFile.id);
+      console.log('📋 Saved file details:', {
+        id: savedFile.id,
+        filename: savedFile.filename,
+        originalName: savedFile.originalName,
+        processingStatus: savedFile.processingStatus,
+        createdAt: savedFile.createdAt
+      });
 
       let extractedText = '';
       let parsedContent: any = {};
