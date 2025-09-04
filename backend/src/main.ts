@@ -67,11 +67,13 @@ const createHealthCheckServer = (port: number) => {
 
 async function bootstrap() {
   // Always use port 8080 for Railway deployment
-  const port = process.env.PORT ? Number(process.env.PORT) : 8080;
-  
+  let port = process.env.PORT ? Number(process.env.PORT) : 8080;
+  let maxPortAttempts = 5;
+  let currentAttempt = 0;
+
   // Start health check server immediately
   const healthServer = createHealthCheckServer(port);
-  
+
   try {
     console.log('🚀 Starting AI CRM Backend...');
     console.log('📊 Environment:', process.env.NODE_ENV || 'development');
@@ -124,15 +126,39 @@ async function bootstrap() {
 
     // Health endpoints are handled by HealthController
 
-    // Start server on configured port
-    await app.listen(port, '0.0.0.0');
-    
+    // Try to start server with port fallback
+    let serverStarted = false;
+    while (!serverStarted && currentAttempt < maxPortAttempts) {
+      try {
+        await app.listen(port, '0.0.0.0');
+        serverStarted = true;
+        console.log(`✅ AI CRM Backend successfully started on port ${port}`);
+      } catch (error) {
+        if (error.code === 'EADDRINUSE') {
+          currentAttempt++;
+          const newPort = port + currentAttempt;
+          console.log(`⚠️ Port ${port} is busy, trying port ${newPort}...`);
+          port = newPort;
+          
+          // Update health check server to new port
+          healthServer.close();
+          const newHealthServer = createHealthCheckServer(port);
+          Object.assign(healthServer, newHealthServer);
+        } else {
+          throw error; // Re-throw non-port related errors
+        }
+      }
+    }
+
+    if (!serverStarted) {
+      throw new Error(`Failed to start server after ${maxPortAttempts} port attempts`);
+    }
+
     // Close the simple health check server since NestJS is now running
     healthServer.close(() => {
       console.log('🔄 Health check server closed, NestJS is now handling requests');
     });
     
-    console.log(`✅ AI CRM Backend successfully started on port ${port}`);
     console.log(`🔗 Health check available at: http://0.0.0.0:${port}/health`);
     console.log(`🔗 Railway health check at: http://0.0.0.0:${port}/healthz`);
     console.log(`🔗 Status endpoint at: http://0.0.0.0:${port}/status`);
@@ -173,7 +199,6 @@ async function bootstrap() {
       process.exit(0);
     });
     
-    // Don't exit - let the health check server keep running
     // This ensures Railway can always reach /healthz
     console.log('🔄 Health check server will continue running for Railway');
     console.log('🔄 API endpoints are available with fallback responses');
