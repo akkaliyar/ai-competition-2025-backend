@@ -17,9 +17,9 @@ const testEndpoint = (port, path) => {
       });
       res.on('end', () => {
         resolve({
-          status: res.statusCode,
-          headers: res.headers,
-          data: data
+          statusCode: res.statusCode,
+          data: data,
+          headers: res.headers
         });
       });
     });
@@ -39,20 +39,23 @@ const testEndpoint = (port, path) => {
 
 const testHealthEndpoints = async () => {
   const port = process.env.PORT || 8080;
-  const endpoints = ['/', '/healthz', '/health', '/ping', '/status'];
-
-  console.log(`🔍 Testing health endpoints on port ${port}...\n`);
-
+  const endpoints = ['/', '/health', '/healthz', '/status', '/ping'];
+  
+  console.log(`🧪 Testing health endpoints on port ${port}...\n`);
+  
   for (const endpoint of endpoints) {
     try {
+      console.log(`🔍 Testing ${endpoint}...`);
       const result = await testEndpoint(port, endpoint);
-      console.log(`✅ ${endpoint}: ${result.status} - ${result.data.substring(0, 100)}...`);
+      console.log(`✅ ${endpoint}: ${result.statusCode} - ${result.data.substring(0, 100)}${result.data.length > 100 ? '...' : ''}`);
     } catch (error) {
       console.log(`❌ ${endpoint}: ${error.message}`);
     }
+    console.log('');
   }
-
-  console.log('\n🎯 Health check test completed!');
+  
+  console.log('🏁 Health check testing completed!');
 };
 
+// Run the test
 testHealthEndpoints().catch(console.error);

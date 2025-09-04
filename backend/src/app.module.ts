@@ -28,46 +28,46 @@ import { BillData } from './entities/bill-data.entity';
         console.log('RAILWAY_PRIVATE_DOMAIN:', process.env.RAILWAY_PRIVATE_DOMAIN);
         console.log('MYSQL_ROOT_PASSWORD exists:', !!process.env.MYSQL_ROOT_PASSWORD);
         
+        const config = {
+          type: 'mysql' as const,
+          entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData],
+          synchronize: false,
+          logging: false, // Disable logging to reduce noise
+          charset: 'utf8mb4',
+          timezone: '+00:00',
+          connectTimeout: 10000,    // Increased timeout for Railway
+          acquireTimeout: 10000,    // Increased timeout for Railway
+          timeout: 10000,           // Increased timeout for Railway
+          retryAttempts: 3,         // Increased retries for Railway
+          retryDelay: 2000,         // Increased delay for Railway
+          maxQueryExecutionTime: 10000,
+          // Add connection pool settings
+          extra: {
+            connectionLimit: 10,
+            acquireTimeout: 10000,
+            timeout: 10000,
+            reconnect: true,
+          }
+        };
+
         // If DATABASE_URL is provided (Railway style), use it
         if (process.env.DATABASE_URL) {
           console.log('📡 Using DATABASE_URL for connection');
           return {
-            type: 'mysql',
+            ...config,
             url: process.env.DATABASE_URL,
-            entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData],
-            synchronize: false,
-            logging: false, // Disable logging to reduce noise
-            charset: 'utf8mb4',
-            timezone: '+00:00',
-            connectTimeout: 5000,    // Reduced timeout
-            acquireTimeout: 5000,    // Reduced timeout
-            timeout: 5000,           // Reduced timeout
-            retryAttempts: 1,        // Reduced retries
-            retryDelay: 1000,        // Reduced delay
-            maxQueryExecutionTime: 5000,
           };
         }
         
         // Fallback to individual environment variables
         console.log('📡 Using individual DB variables for connection');
         return {
-          type: 'mysql',
+          ...config,
           host: process.env.DB_HOST || 'localhost',
           port: parseInt(process.env.DB_PORT) || 3306,
           username: process.env.DB_USERNAME || 'root',
           password: process.env.DB_PASSWORD || '',
           database: process.env.DB_NAME || 'ai_crm',
-          entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData],
-          synchronize: false,
-          logging: false,
-          charset: 'utf8mb4',
-          timezone: '+00:00',
-          connectTimeout: 5000,
-          acquireTimeout: 5000,
-          timeout: 5000,
-          retryAttempts: 1,
-          retryDelay: 1000,
-          maxQueryExecutionTime: 5000,
         };
       },
     }),

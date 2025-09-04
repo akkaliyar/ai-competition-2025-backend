@@ -6,14 +6,15 @@ startCommand = "npm start"
 healthcheckPath = "/healthz"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
 
 # Additional health check configuration
 [deploy.healthcheck]
 path = "/healthz"
 timeout = 300
 interval = 30
-retries = 3
+retries = 5
+startPeriod = 60
 
 [env]
 NODE_ENV = "production"
