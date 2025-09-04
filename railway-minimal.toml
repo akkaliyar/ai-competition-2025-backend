@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node railway-health.js"
+healthcheckPath = "/healthz"
