@@ -62,12 +62,19 @@ export class FileUploadController {
     @Headers('user-agent') userAgent?: string,
   ) {
     // Upload request received
+    console.log('🚀 File upload request received');
+    console.log('📁 File details:', {
+      originalname: file?.originalname,
+      size: file?.size,
+      mimetype: file?.mimetype
+    });
     
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
     // File received
+    console.log('✅ File received successfully');
 
     try {
       // Extract request information
@@ -77,10 +84,18 @@ export class FileUploadController {
         sessionId: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       };
 
+      console.log('🔍 Request info:', requestInfo);
+
       // Starting file processing
+      console.log('🚀 Starting file processing...');
       const result = await this.fileProcessingService.processFile(file, requestInfo);
-      // File processing completed
-      console.log(result);
+      console.log('✅ File processing completed successfully');
+      console.log('📊 Processing result:', {
+        id: result.id,
+        filename: result.filename,
+        processingStatus: result.processingStatus
+      });
+      
       return {
         success: true,
         message: 'File processed successfully',

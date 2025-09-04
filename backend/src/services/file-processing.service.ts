@@ -37,6 +37,14 @@ export class FileProcessingService {
 
   async processFile(file: Express.Multer.File, requestInfo?: { userAgent?: string; ip?: string; sessionId?: string }): Promise<ParsedFile> {
     const startTime = Date.now();
+    console.log('🔧 FileProcessingService.processFile started');
+    console.log('📊 Repositories status:', {
+      parsedFileRepo: !!this.parsedFileRepository,
+      ocrResultRepo: !!this.ocrResultRepository,
+      fileMetadataRepo: !!this.fileMetadataRepository,
+      tableExtractionRepo: !!this.tableExtractionRepository
+    });
+    
     // Processing File
     // Name: ${file.originalname}
     // Size: ${(file.size / 1024).toFixed(2)} KB
@@ -48,10 +56,11 @@ export class FileProcessingService {
     }
     
     const fileType = this.determineFileTypeEnum(file);
-    // Detected file type: ${fileType}
+    console.log('📁 Detected file type:', fileType);
 
     // Generate file hash for deduplication
     const fileHash = this.generateFileHash(file.buffer);
+    console.log('🔐 Generated file hash:', fileHash);
     
     // Generate unique filename and save to disk
     const fileExtension = path.extname(file.originalname);
@@ -60,9 +69,12 @@ export class FileProcessingService {
     const fullFilePath = path.join(process.cwd(), filePath);
     
     // Save file to disk
+    console.log('💾 Saving file to disk...');
     await this.saveFileToDisk(file.buffer, fullFilePath);
+    console.log('✅ File saved to disk:', filePath);
 
     // Create initial ParsedFile record
+    console.log('📝 Creating ParsedFile record...');
     const parsedFile = new ParsedFile();
     parsedFile.filename = uniqueFilename; // Use the hash-based filename
     parsedFile.originalName = file.originalname;
@@ -83,8 +95,9 @@ export class FileProcessingService {
 
     try {
       // Save initial record
+      console.log('💾 Saving to database...');
       const savedFile = await this.parsedFileRepository.save(parsedFile);
-      // Initial file record saved with ID: ${savedFile.id}
+      console.log('✅ Initial file record saved with ID:', savedFile.id);
 
       let extractedText = '';
       let parsedContent: any = {};
