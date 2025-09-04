@@ -1,39 +1,49 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { DataSource } from 'typeorm';
-import { InjectDataSource } from '@nestjs/typeorm';
 
 @Controller()
 export class HealthController {
-  constructor(
-    @InjectDataSource() private dataSource: DataSource
-  ) {}
-
-  @Get('health')
-  @HttpCode(HttpStatus.OK)
-  health(@Res() res: Response) {
-    // Simple health check that always returns 200 (no database dependency)
-    res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      service: 'ai-crm-backend',
-      environment: process.env.NODE_ENV || 'development'
-    });
-  }
+  constructor(private dataSource: DataSource) {}
 
   @Get('healthz')
   @HttpCode(HttpStatus.OK)
   healthz(@Res() res: Response) {
-    // Railway health check endpoint - simplest possible response
-    // This should never fail - always return 200 OK
+    // Railway health check - ALWAYS return 200 OK
+    console.log('🔍 Railway health check (Controller) - SUCCESS');
+    res.status(200).send('OK');
+  }
+
+  @Get('health')
+  @HttpCode(HttpStatus.OK)
+  async health(@Res() res: Response) {
     try {
-      console.log('🔍 Health check requested from Railway (Controller)');
-      res.status(200).send('OK');
+      // Check database connection
+      const isConnected = this.dataSource.isInitialized;
+      
+      if (isConnected) {
+        res.status(200).json({
+          status: 'ok',
+          timestamp: new Date().toISOString(),
+          database: 'connected',
+          message: 'Service is healthy'
+        });
+      } else {
+        res.status(503).json({
+          status: 'degraded',
+          timestamp: new Date().toISOString(),
+          database: 'disconnected',
+          message: 'Service is running but database is not connected'
+        });
+      }
     } catch (error) {
-      // Even if there's an error, return 200
-      console.error('❌ Health check error in controller:', error);
-      res.status(200).send('OK');
+      console.error('Health check error:', error);
+      res.status(503).json({
+        status: 'degraded',
+        timestamp: new Date().toISOString(),
+        database: 'error',
+        message: 'Service is running but database check failed'
+      });
     }
   }
 
@@ -41,32 +51,31 @@ export class HealthController {
   @HttpCode(HttpStatus.OK)
   async status(@Res() res: Response) {
     try {
-      // Status endpoint with database health
-      let dbStatus = 'unknown';
-      try {
-        if (this.dataSource.isInitialized) {
-          await this.dataSource.query('SELECT 1');
-          dbStatus = 'connected';
-        } else {
-          dbStatus = 'not_initialized';
-        }
-      } catch (dbError) {
-        dbStatus = 'error';
-      }
-
-      res.status(200).json({ 
-        status: 'healthy',
+      const isConnected = this.dataSource.isInitialized;
+      
+      res.status(200).json({
+        status: isConnected ? 'healthy' : 'degraded',
         timestamp: new Date().toISOString(),
-        pid: process.pid,
-        memory: process.memoryUsage(),
-        database: dbStatus,
-        uptime: process.uptime()
+        database: isConnected ? 'connected' : 'disconnected',
+        endpoints: {
+          health: '/health',
+          healthz: '/healthz',
+          status: '/status',
+          ping: '/ping'
+        }
       });
     } catch (error) {
-      res.status(500).json({
-        status: 'error',
+      console.error('Status check error:', error);
+      res.status(200).json({
+        status: 'degraded',
         timestamp: new Date().toISOString(),
-        error: error.message
+        database: 'unknown',
+        endpoints: {
+          health: '/health',
+          healthz: '/healthz',
+          status: '/status',
+          ping: '/ping'
+        }
       });
     }
   }
@@ -74,21 +83,6 @@ export class HealthController {
   @Get('ping')
   @HttpCode(HttpStatus.OK)
   ping(@Res() res: Response) {
-    // Simple ping endpoint
     res.status(200).send('pong');
-  }
-
-  @Get()
-  root() {
-    console.log('🏠 Root endpoint accessed');
-    return {
-      message: 'AI CRM Backend API',
-      status: 'running',
-      timestamp: new Date().toISOString(),
-      version: '1.0.0',
-      endpoints: ['/healthz', '/health', '/status', '/ping'],
-      uptime: process.uptime(),
-      environment: process.env.NODE_ENV || 'development'
-    };
   }
 }
