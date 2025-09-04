@@ -1,0 +1,30 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Additional health check configuration
+[deploy.healthcheck]
+path = "/healthz"
+timeout = 300
+interval = 30
+retries = 3
+
+[env]
+NODE_ENV = "production"
+SERVICE_TYPE = "backend"
+PORT = "8080"
+
+# Database variables should be set manually in Railway dashboard
+# See RAILWAY_ENV_SETUP.md for instructions
+
+# To deploy frontend as separate service:
+# 1. Create new Railway service from same repo
+# 2. Set SERVICE_TYPE=frontend
+# 3. Set PORT=3000
+# 4. Set healthcheckPath="/"
