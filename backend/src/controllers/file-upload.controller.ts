@@ -544,4 +544,31 @@ export class FileUploadController {
       }
     };
   }
+
+  @Get('debug/:id')
+  async debugFile(@Param('id', ParseIntPipe) id: number) {
+    try {
+      const file = await this.fileProcessingService.getParsedFileById(id);
+      if (!file) {
+        throw new BadRequestException('File not found');
+      }
+
+      return {
+        status: true,
+        message: "Debug information retrieved",
+        data: {
+          id: file.id,
+          fileName: file.originalName,
+          extractedText: file.extractedText,
+          extractedTextLength: file.extractedText ? file.extractedText.length : 0,
+          isMedicalBill: file.extractedText ? this.medicalBillExtractionService.isMedicalBill(file.extractedText) : false,
+          medicalBillData: file.extractedText && this.medicalBillExtractionService.isMedicalBill(file.extractedText) 
+            ? this.medicalBillExtractionService.extractMedicalBillData(file.extractedText)
+            : null
+        }
+      };
+    } catch (error) {
+      throw new BadRequestException(`Debug failed: ${error.message}`);
+    }
+  }
 }

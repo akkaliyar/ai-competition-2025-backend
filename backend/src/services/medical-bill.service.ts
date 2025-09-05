@@ -15,38 +15,72 @@ export class MedicalBillService {
    * Save medical bill data to database
    */
   async saveMedicalBill(parsedFileId: number, medicalBillData: MedicalBillDto, confidence: number, fileInfo?: { fileName?: string, fileSize?: number, processedStatus?: string }): Promise<MedicalBill> {
+    // Helper function to safely handle numeric values
+    const safeNumber = (value: any): number => {
+      if (value === null || value === undefined || value === '') return 0;
+      const num = Number(value);
+      return isNaN(num) ? 0 : num;
+    };
+
     const medicalBill = this.medicalBillRepository.create({
       parsedFileId,
-      fileName: fileInfo?.fileName || medicalBillData.fileName,
-      fileSize: fileInfo?.fileSize || medicalBillData.fileSize,
+      fileName: fileInfo?.fileName || medicalBillData.fileName || '',
+      fileSize: safeNumber(fileInfo?.fileSize || medicalBillData.fileSize),
       processedStatus: fileInfo?.processedStatus || medicalBillData.processedStatus || 'completed',
       processedDate: new Date(),
-      invoiceNo: medicalBillData.invoiceNo,
-      date: medicalBillData.date,
-      shopName: medicalBillData.shopName,
+      invoiceNo: medicalBillData.invoiceNo || '',
+      date: medicalBillData.date || '',
+      shopName: medicalBillData.shopName || '',
       shopAddress: medicalBillData.shopAddress || '',
       phone: medicalBillData.phone || [],
-      patientName: medicalBillData.patientName,
+      patientName: medicalBillData.patientName || '',
       patientPhone: medicalBillData.patientPhone || '',
       prescribedBy: medicalBillData.prescribedBy || '',
       doctorName: medicalBillData.doctorName || '',
       doctorSpecialization: medicalBillData.doctorSpecialization || '',
       doctorPhone: medicalBillData.doctorPhone || '',
-      items: medicalBillData.items,
-      totalQty: medicalBillData.totalQty,
-      subTotal: medicalBillData.subTotal,
-      lessDiscount: medicalBillData.lessDiscount,
-      otherAdj: medicalBillData.otherAdj,
-      roundOff: medicalBillData.roundOff,
-      grandTotal: medicalBillData.grandTotal,
-      amountInWords: medicalBillData.amountInWords,
+      items: this.sanitizeItems(medicalBillData.items || []),
+      totalQty: safeNumber(medicalBillData.totalQty),
+      subTotal: safeNumber(medicalBillData.subTotal),
+      lessDiscount: safeNumber(medicalBillData.lessDiscount),
+      otherAdj: safeNumber(medicalBillData.otherAdj),
+      roundOff: safeNumber(medicalBillData.roundOff),
+      grandTotal: safeNumber(medicalBillData.grandTotal),
+      amountInWords: medicalBillData.amountInWords || '',
       message: medicalBillData.message || '',
       termsAndConditions: medicalBillData.termsAndConditions || [],
-      extractionConfidence: confidence,
+      extractionConfidence: safeNumber(confidence),
       extractionMethod: 'medical_bill_specialized_parser',
     });
 
     return await this.medicalBillRepository.save(medicalBill);
+  }
+
+  /**
+   * Sanitize items to ensure all numeric fields are valid
+   */
+  private sanitizeItems(items: any[]): any[] {
+    return items.map(item => ({
+      ...item,
+      sNo: this.safeNumber(item.sNo),
+      mrp: this.safeNumber(item.mrp),
+      qty: this.safeNumber(item.qty),
+      rate: this.safeNumber(item.rate),
+      amount: this.safeNumber(item.amount),
+      itemDescription: item.itemDescription || '',
+      pack: item.pack || '',
+      batchNo: item.batchNo || '',
+      exp: item.exp || ''
+    }));
+  }
+
+  /**
+   * Helper function to safely handle numeric values
+   */
+  private safeNumber(value: any): number {
+    if (value === null || value === undefined || value === '') return 0;
+    const num = Number(value);
+    return isNaN(num) ? 0 : num;
   }
 
   /**

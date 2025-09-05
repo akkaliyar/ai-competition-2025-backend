@@ -5,7 +5,7 @@ import { MedicalBillDto, MedicalBillItemDto } from '../dto/medical-bill.dto';
 export class MedicalBillExtractionService {
   
   /**
-   * Extract medical bill data from OCR text
+   * Extract medical bill data from OCR text - raw extraction without patterns
    */
   extractMedicalBillData(ocrText: string): MedicalBillDto {
     const lines = ocrText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
@@ -27,174 +27,8 @@ export class MedicalBillExtractionService {
       amountInWords: ''
     };
 
-    // Extract invoice number
-    const invoicePatterns = [
-      /Invoice\s+No\.\.\s+([A-Z0-9]+)/i,
-      /(?:invoice\s*no\.?|bill\s*no\.?)\s*:?\s*([A-Z0-9]+)/i,
-      /(?:invoice|bill)\s*no[.:\s]*([A-Z0-9]+)/i
-    ];
-    
-    for (const pattern of invoicePatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.invoiceNo = match[1] ? match[1].trim() : match[0].trim();
-        break;
-      }
-    }
-
-    // Extract date
-    const datePatterns = [
-      /Date\s*:\s*(\d{1,2}-\d{1,2}-\d{4})/i,
-      /(?:date)\s*:?\s*(\d{1,2}-\d{1,2}-\d{4})/i,
-      /(\d{1,2}-\d{1,2}-\d{4})/i
-    ];
-    
-    for (const pattern of datePatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.date = match[1] ? match[1].trim() : match[0].trim();
-        break;
-      }
-    }
-
-    // Extract shop name
-    const shopNamePatterns = [
-      /([A-Z\s]+(?:MEDICOSE|MEDICAL|PHARMACY|CLINIC|HOSPITAL))/i,
-      /([A-Z\s]+(?:PRIVATE|LIMITED|LTD))/i
-    ];
-    
-    for (const pattern of shopNamePatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.shopName = match[1].trim();
-        break;
-      }
-    }
-
-    // Extract shop address
-    const addressPatterns = [
-      /(?:Address|ADDRESS)\s*:?\s*([^]*?)(?=Phone|Ph\.|Contact|$)/i,
-      /(?:SHOP|Shop)\s+\d+[^]*?(?=Phone|Ph\.|Contact|$)/i
-    ];
-    
-    for (const pattern of addressPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.shopAddress = match[1].trim().replace(/\s+/g, ' ');
-        break;
-      }
-    }
-
-    // Extract phone numbers - dynamic extraction only
-    const phonePatterns = [
-      /(\d{10})/g,
-      /(\d{3,4}[-.\s]?\d{3,4}[-.\s]?\d{4})/g
-    ];
-    
-    const phoneNumbers: string[] = [];
-    for (const pattern of phonePatterns) {
-      const matches = ocrText.matchAll(pattern);
-      for (const match of matches) {
-        const phone = match[1].replace(/[-.\s]/g, '');
-        if (phone.length >= 10) {
-          phoneNumbers.push(phone);
-        }
-      }
-    }
-    billData.phone = [...new Set(phoneNumbers)]; // Remove duplicates
-
-    // Extract patient name - improved patterns
-    const patientPatterns = [
-      /Patient\s+Name\s*:\s*([A-Z\s]+?)(?=\s*Ph\.|Phone|$)/i,
-      /Patient\s+Name\s*:\s*([A-Z\s]+)/i,
-      /Name\s*:\s*([A-Z\s]+?)(?=\s*Ph\.|Phone|$)/i
-    ];
-    
-    for (const pattern of patientPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        let patientName = match[1] ? match[1].trim() : match[0].trim();
-        // Clean up any extra text that might be captured
-        patientName = patientName.replace(/\s+Ph\.|Phone.*$/i, '').trim();
-        // Only set if we have a valid name (at least 3 characters, no newlines)
-        if (patientName && !patientName.includes('\n') && patientName.length >= 3) {
-          billData.patientName = patientName;
-          break;
-        }
-      }
-    }
-
-    // Extract patient phone - dynamic extraction only
-    const patientPhonePatterns = [
-      /(?:Patient|Name)[^]*?(\d{10})/i,
-      /Ph\.No\.s?\s*(\d{10})/i
-    ];
-    
-    for (const pattern of patientPhonePatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.patientPhone = match[1].trim();
-        break;
-      }
-    }
-
-    // Extract doctor details - only if "by Dr" is present
-    const doctorPatterns = [
-      /(?:Prescribed|by)\s+Dr\.?\s*([^]*?)(?=S\.No|Item|$)/i,
-      /Dr\.?\s*([A-Z\s]+?)(?=S\.No|Item|$)/i
-    ];
-    
-    for (const pattern of doctorPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        const doctorInfo = match[1].trim();
-        if (doctorInfo && doctorInfo.length > 0) {
-          const doctorDetails = this.extractDoctorDetails(doctorInfo);
-          billData.prescribedBy = doctorInfo;
-          billData.doctorName = doctorDetails.name;
-          billData.doctorSpecialization = doctorDetails.specialization;
-          break;
-        }
-      }
-    }
-
-    // Extract doctor phone - dynamic extraction only
-    const doctorPhonePatterns = [
-      /(?:Dr\.?|Doctor)[^]*?(\d{10})/i
-    ];
-    
-    for (const pattern of doctorPhonePatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.doctorPhone = match[1].trim();
-        break;
-      }
-    }
-
-    // Extract items
-    billData.items = this.extractItems(lines);
-
-    // Extract totals
-    this.extractTotals(ocrText, billData);
-
-    // Extract amount in words - dynamic extraction only
-    const amountInWordsPatterns = [
-      /(?:Amount\s+in\s+Words|Amountin\s+Words)\s*:?\s*([^]*?)(?=Sub\s+Total|Total|$)/i,
-      /(?:Rs\.?\s+[^]*?only)/i
-    ];
-    
-    for (const pattern of amountInWordsPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        let amountText = match[1] ? match[1].trim() : match[0].trim();
-        // Clean up OCR artifacts
-        amountText = amountText.replace(/[^\w\s.,]/g, ' ').replace(/\s+/g, ' ').trim();
-        if (amountText && amountText.length > 10) {
-          billData.amountInWords = amountText;
-          break;
-        }
-      }
-    }
+    // Extract values by looking for keywords and taking the next available text
+    this.extractRawValues(ocrText, lines, billData);
 
     return billData;
   }
@@ -221,250 +55,393 @@ export class MedicalBillExtractionService {
     return medicalScore >= 3 && billScore >= 2;
   }
 
-  private extractItems(lines: string[]): MedicalBillItemDto[] {
+  private extractRawValues(ocrText: string, lines: string[], billData: MedicalBillDto): void {
+    // Extract invoice number - look for "Invoice No" and take the next text
+    const invoiceIndex = ocrText.toLowerCase().indexOf('invoice no');
+    if (invoiceIndex !== -1) {
+      const afterInvoice = ocrText.substring(invoiceIndex + 10).trim();
+      const words = afterInvoice.split(/\s+/);
+      if (words.length > 0) {
+        // Skip dots and colons, take the first meaningful word
+        for (const word of words) {
+          if (word && word !== '.' && word !== ':' && word.length > 1) {
+            billData.invoiceNo = word;
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract date - look for "Date" and take the next text
+    const dateIndex = ocrText.toLowerCase().indexOf('date');
+    if (dateIndex !== -1) {
+      const afterDate = ocrText.substring(dateIndex + 4).trim();
+      const words = afterDate.split(/\s+/);
+      if (words.length > 0) {
+        // Skip colons, take the first meaningful word
+        for (const word of words) {
+          if (word && word !== ':' && word.length > 1) {
+            billData.date = word;
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract shop name - look for common shop name patterns
+    for (const line of lines) {
+      if (line.toLowerCase().includes('medicose') || 
+          line.toLowerCase().includes('medical') || 
+          line.toLowerCase().includes('pharmacy')) {
+        // Take only the shop name part, not the entire line
+        const words = line.split(/\s+/);
+        const shopWords = [];
+        for (const word of words) {
+          if (word.toLowerCase().includes('medicose') || 
+              word.toLowerCase().includes('medical') || 
+              word.toLowerCase().includes('pharmacy')) {
+            shopWords.push(word);
+            break;
+          }
+          shopWords.push(word);
+        }
+        billData.shopName = shopWords.join(' ');
+        break;
+      }
+    }
+
+    // Extract shop address - look for address keywords
+    for (const line of lines) {
+      if (line.toLowerCase().includes('shop') || 
+          line.toLowerCase().includes('address') ||
+          line.toLowerCase().includes('floor')) {
+        billData.shopAddress = line;
+        break;
+      }
+    }
+
+    // Extract phone numbers - find all 10-digit numbers
+    const phoneMatches = ocrText.match(/\d{10}/g);
+    if (phoneMatches) {
+      billData.phone = [...new Set(phoneMatches)];
+    }
+
+    // Extract patient name - look for "Patient Name" and take the next text
+    const patientIndex = ocrText.toLowerCase().indexOf('patient name');
+    if (patientIndex !== -1) {
+      const afterPatient = ocrText.substring(patientIndex + 12).trim();
+      const words = afterPatient.split(/\s+/);
+      if (words.length > 0) {
+        // Skip colons, take the first meaningful words
+        const nameWords = [];
+        for (const word of words) {
+          if (word && word !== ':' && word.length > 1) {
+            // Clean up OCR errors
+            const cleanWord = word.replace(/[|:;]/g, '').trim();
+            if (cleanWord && cleanWord.length > 1) {
+              nameWords.push(cleanWord);
+              if (nameWords.length >= 2) break; // Take first 2 words
+            }
+          }
+        }
+        billData.patientName = nameWords.join(' ');
+      }
+    }
+
+    // Extract patient phone - look for phone near patient name
+    const patientPhoneIndex = ocrText.toLowerCase().indexOf('ph.no');
+    if (patientPhoneIndex !== -1) {
+      const afterPhone = ocrText.substring(patientPhoneIndex + 5).trim();
+      const phoneMatch = afterPhone.match(/\d{10}/);
+      if (phoneMatch) {
+        billData.patientPhone = phoneMatch[0];
+      }
+    }
+
+    // Extract doctor details - look for "Dr" or "Doctor"
+    const doctorIndex = ocrText.toLowerCase().indexOf('dr');
+    if (doctorIndex !== -1) {
+      const afterDr = ocrText.substring(doctorIndex + 2).trim();
+      const words = afterDr.split(/\s+/);
+      if (words.length > 0) {
+        // Skip dots, take the first meaningful word
+        for (const word of words) {
+          if (word && word !== '.' && word.length > 1) {
+            billData.prescribedBy = 'Dr ' + word;
+            billData.doctorName = word;
+            break;
+          }
+        }
+        // Look for specialization in the next words
+        for (let i = 1; i < words.length; i++) {
+          if (words[i] && words[i] !== '.' && words[i].length > 1) {
+            billData.doctorSpecialization = words[i];
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract doctor phone - look for phone near doctor info
+    const doctorPhoneIndex = ocrText.toLowerCase().indexOf('dr');
+    if (doctorPhoneIndex !== -1) {
+      const doctorSection = ocrText.substring(doctorPhoneIndex, doctorPhoneIndex + 100);
+      const phoneMatch = doctorSection.match(/\d{10}/);
+      if (phoneMatch) {
+        billData.doctorPhone = phoneMatch[0];
+      }
+    }
+
+    // Extract items - look for lines that start with numbers
+    this.extractRawItems(lines, billData);
+
+    // Extract totals - look for total keywords
+    this.extractRawTotals(ocrText, billData);
+
+    // Extract amount in words - look for "Amount in Words" or similar
+    const amountWordsIndex = ocrText.toLowerCase().indexOf('amount in words');
+    if (amountWordsIndex !== -1) {
+      const afterAmount = ocrText.substring(amountWordsIndex + 15).trim();
+      const words = afterAmount.split(/\s+/);
+      if (words.length > 0) {
+        // Take the first few words that look like amount in words
+        const amountWords = [];
+        for (const word of words) {
+          if (word && word.length > 1) {
+            amountWords.push(word);
+            if (amountWords.length >= 8) break; // Take first 8 words
+          }
+        }
+        billData.amountInWords = amountWords.join(' ');
+      }
+    }
+  }
+
+  private extractRawItems(lines: string[], billData: MedicalBillDto): void {
     const items: MedicalBillItemDto[] = [];
     let itemIndex = 1;
 
-    // Look for item table patterns
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (const line of lines) {
       const trimmedLine = line.trim();
-
+      
+      // Skip empty lines
+      if (!trimmedLine) continue;
+      
       // Skip header lines (but not item lines that start with numbers)
-      if (trimmedLine.includes('S.No') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('s.no') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('Description') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('description') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('Pack') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('pack') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('MRP') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('mrp') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('Batch') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('batch') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('Exp') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('exp') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('Qty') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('qty') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('Rate') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('rate') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
-      if (trimmedLine.includes('Amount') && !trimmedLine.match(/^\d+\s/)) {
+      if (trimmedLine.toLowerCase().includes('amount') && !/^\d+\s/.test(trimmedLine)) {
         continue;
       }
 
-      // Try different item patterns
-      const item = this.parseItemLine(trimmedLine, itemIndex);
-      if (item) {
-        items.push(item);
-        itemIndex++;
+      // Look for lines that start with a number (item lines)
+      // Also handle cases where OCR might have extra characters
+      if (/^\d+[\s\|\:\-]/.test(trimmedLine)) {
+        const item = this.parseRawItemLine(trimmedLine, itemIndex);
+        if (item && item.itemDescription && item.itemDescription.length > 2) {
+          items.push(item);
+          itemIndex++;
+        }
       }
     }
 
-    return items;
+    billData.items = items;
   }
 
-  private parseItemLine(line: string, sNo: number): MedicalBillItemDto | null {
-    // Pattern 1: More flexible pattern that handles hyphens and numbers in descriptions
-    const pattern1 = /^(\d+)\s+([A-Z0-9\s\-]+?)\s+([A-Z0-9\*X]+)\s+([\d.]+)\s+([A-Z0-9]+)\s+([\d\/]+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)$/i;
-    const match1 = line.match(pattern1);
-    if (match1) {
-      return {
-        sNo: sNo,
-        itemDescription: match1[2].trim(),
-        pack: match1[3].trim(),
-        mrp: parseFloat(match1[4]),
-        batchNo: match1[5].trim(),
-        exp: match1[6].trim(),
-        qty: parseInt(match1[7]),
-        rate: parseFloat(match1[8]),
-        amount: parseFloat(match1[9])
-      };
-    }
-
-    // Pattern 2: Alternative pattern for different spacing
-    const pattern2 = /^(\d+)\s+([A-Z0-9\s\-]+?)\s+([A-Z0-9\*X]+)\s+([\d.]+)\s+([A-Z0-9]+)\s+([\d\/]+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)$/i;
-    const match2 = line.match(pattern2);
-    if (match2) {
-      return {
-        sNo: sNo,
-        itemDescription: match2[2].trim(),
-        pack: match2[3].trim(),
-        mrp: parseFloat(match2[4]),
-        batchNo: match2[5].trim(),
-        exp: match2[6].trim(),
-        qty: parseInt(match2[7]),
-        rate: parseFloat(match2[8]),
-        amount: parseFloat(match2[9])
-      };
-    }
-
-    // Pattern 3: Split by spaces and try to parse manually
-    const parts = line.trim().split(/\s+/);
-    if (parts.length >= 9 && /^\d+$/.test(parts[0])) {
-      try {
-        return {
-          sNo: sNo,
-          itemDescription: parts.slice(1, -8).join(' ').trim(),
-          pack: parts[parts.length - 8] || '',
-          mrp: parseFloat(parts[parts.length - 7]) || 0,
-          batchNo: parts[parts.length - 6] || '',
-          exp: parts[parts.length - 5] || '',
-          qty: parseInt(parts[parts.length - 4]) || 0,
-          rate: parseFloat(parts[parts.length - 3]) || 0,
-          amount: parseFloat(parts[parts.length - 2]) || 0
-        };
-      } catch (e) {
-        // If parsing fails, return null
-      }
-    }
-
-    return null;
-  }
-
-  private extractItemDescriptionFromContext(line: string): string {
-    // Try to extract item description from the line context
-    const medicalTerms = /(?:TAB|CAP|SYR|INJ|DROPS|OINT|GEL|POWDER|SACHET|ML|MG)/i;
-    if (medicalTerms.test(line)) {
-      const match = line.match(/([A-Z\-\d]+(?:TAB|CAP|SYR|INJ|DROPS|OINT|GEL|POWDER|SACHET|ML|MG)[A-Z\-\d\s]*)/i);
-      if (match) {
-        return match[1].trim();
-      }
-    }
+  private parseRawItemLine(line: string, sNo: number): MedicalBillItemDto | null {
+    // Clean up the line - remove extra characters that OCR might add
+    let cleanLine = line.trim();
     
-    // Try to extract from the full line context
-    const fullLineMatch = line.match(/([A-Z\-\d\s]+(?:TAB|CAP|SYR|INJ|DROPS|OINT|GEL|POWDER|SACHET|ML|MG))/i);
-    if (fullLineMatch) {
-      return fullLineMatch[1].trim();
+    // Remove common OCR artifacts
+    cleanLine = cleanLine.replace(/[|:;]/g, ' ');
+    cleanLine = cleanLine.replace(/\s+/g, ' ');
+    
+    const parts = cleanLine.split(/\s+/);
+    
+    if (parts.length < 6) {
+      return null;
     }
 
-    // Fallback: extract any text that looks like a medicine name
-    const textMatch = line.match(/([A-Z\-\d\s]{5,})/);
-    if (textMatch) {
-      return textMatch[1].trim();
-    }
+    try {
+      // Helper function to safely parse numbers
+      const safeParseFloat = (value: string): number => {
+        const parsed = parseFloat(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
 
-    return `Item ${line.substring(0, 20)}...`;
+      const safeParseInt = (value: string): number => {
+        const parsed = parseInt(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      // For the format: "1 PARACIP-650MG TAB 1*10 22.84 405 10/27 1 22.84 22.84"
+      // Parts: [0: sNo, 1-2: description, 3: pack, 4: mrp, 5: batchNo, 6: exp, 7: qty, 8: rate, 9: amount]
+      
+      // Find where the numeric values start (MRP, Batch, Exp, Qty, Rate, Amount)
+      let descriptionEndIndex = 1;
+      let packIndex = -1;
+      let mrpIndex = -1;
+      
+      // Look for the pack pattern (like "1*10", "1X200ML", "1X10")
+      for (let i = 1; i < parts.length - 6; i++) {
+        if (parts[i].match(/^\d+[\*X]\d+/)) {
+          packIndex = i;
+          descriptionEndIndex = i;
+          break;
+        }
+      }
+      
+      // If no pack pattern found, try to find the first numeric value (MRP)
+      if (packIndex === -1) {
+        for (let i = 1; i < parts.length - 6; i++) {
+          if (parts[i].match(/^\d+\.?\d*$/)) {
+            mrpIndex = i;
+            descriptionEndIndex = i;
+            break;
+          }
+        }
+      }
+      
+      // Extract description (everything between sNo and pack/mrp)
+      const itemDescription = parts.slice(1, descriptionEndIndex).join(' ').trim();
+      
+      // Skip if description is too short or contains only special characters
+      if (itemDescription.length < 3 || /^[^a-zA-Z0-9]*$/.test(itemDescription)) {
+        return null;
+      }
+      
+      // Extract pack
+      const pack = packIndex !== -1 ? parts[packIndex] : '';
+      
+      // Find MRP (first decimal number after description)
+      let actualMrpIndex = packIndex !== -1 ? packIndex + 1 : mrpIndex;
+      if (actualMrpIndex === -1) {
+        // Fallback: look for first decimal number
+        for (let i = descriptionEndIndex; i < parts.length - 5; i++) {
+          if (parts[i].match(/^\d+\.\d+$/)) {
+            actualMrpIndex = i;
+            break;
+          }
+        }
+      }
+      
+      // Extract remaining fields based on the pattern
+      const mrp = actualMrpIndex !== -1 ? safeParseFloat(parts[actualMrpIndex]) : 0;
+      const batchNo = actualMrpIndex !== -1 && actualMrpIndex + 1 < parts.length ? parts[actualMrpIndex + 1] : '';
+      const exp = actualMrpIndex !== -1 && actualMrpIndex + 2 < parts.length ? parts[actualMrpIndex + 2] : '';
+      const qty = actualMrpIndex !== -1 && actualMrpIndex + 3 < parts.length ? safeParseInt(parts[actualMrpIndex + 3]) : 0;
+      const rate = actualMrpIndex !== -1 && actualMrpIndex + 4 < parts.length ? safeParseFloat(parts[actualMrpIndex + 4]) : 0;
+      const amount = actualMrpIndex !== -1 && actualMrpIndex + 5 < parts.length ? safeParseFloat(parts[actualMrpIndex + 5]) : 0;
+
+      return {
+        sNo: sNo,
+        itemDescription: itemDescription,
+        pack: pack,
+        mrp: mrp,
+        batchNo: batchNo,
+        exp: exp,
+        qty: qty,
+        rate: rate,
+        amount: amount
+      };
+    } catch (e) {
+      return null;
+    }
   }
 
-  private extractTotals(ocrText: string, billData: MedicalBillDto): void {
+  private extractRawTotals(ocrText: string, billData: MedicalBillDto): void {
+    // Helper function to safely parse numbers
+    const safeParseFloat = (value: string): number => {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    const safeParseInt = (value: string): number => {
+      const parsed = parseInt(value);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
     // Extract sub total
-    const subTotalPatterns = [
-      /Sub\s+Total\s*:?\s*([\d.]+)/i,
-      /Sub\s*Total\s*([\d.]+)/i
-    ];
-    
-    for (const pattern of subTotalPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.subTotal = parseFloat(match[1]);
-        break;
+    const subTotalIndex = ocrText.toLowerCase().indexOf('sub total');
+    if (subTotalIndex !== -1) {
+      const afterSubTotal = ocrText.substring(subTotalIndex + 9).trim();
+      const numberMatch = afterSubTotal.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.subTotal = safeParseFloat(numberMatch[0]);
       }
     }
 
     // Extract total quantity
-    const totalQtyPatterns = [
-      /Total\s*Qty\s*:?\s*(\d+)/i,
-      /Total\s*Quantity\s*:?\s*(\d+)/i
-    ];
-    
-    for (const pattern of totalQtyPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.totalQty = parseInt(match[1]);
-        break;
+    const totalQtyIndex = ocrText.toLowerCase().indexOf('totalqty');
+    if (totalQtyIndex !== -1) {
+      const afterTotalQty = ocrText.substring(totalQtyIndex + 8).trim();
+      const numberMatch = afterTotalQty.match(/\d+/);
+      if (numberMatch) {
+        billData.totalQty = safeParseInt(numberMatch[0]);
       }
     }
 
     // Extract less discount
-    const lessDiscountPatterns = [
-      /Less\s+Discount\s*:?\s*([\d.]+)/i,
-      /Discount\s*:?\s*([\d.]+)/i
-    ];
-    
-    for (const pattern of lessDiscountPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.lessDiscount = parseFloat(match[1]);
-        break;
+    const discountIndex = ocrText.toLowerCase().indexOf('less discount');
+    if (discountIndex !== -1) {
+      const afterDiscount = ocrText.substring(discountIndex + 12).trim();
+      const numberMatch = afterDiscount.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.lessDiscount = safeParseFloat(numberMatch[0]);
       }
     }
 
     // Extract other adjustments
-    const otherAdjPatterns = [
-      /Other\s+Adj\s*:?\s*([\d.]+)/i,
-      /Other\s+Adjustment\s*:?\s*([\d.]+)/i
-    ];
-    
-    for (const pattern of otherAdjPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.otherAdj = parseFloat(match[1]);
-        break;
+    const otherAdjIndex = ocrText.toLowerCase().indexOf('other adj');
+    if (otherAdjIndex !== -1) {
+      const afterOtherAdj = ocrText.substring(otherAdjIndex + 9).trim();
+      const numberMatch = afterOtherAdj.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.otherAdj = safeParseFloat(numberMatch[0]);
       }
     }
 
     // Extract round off
-    const roundOffPatterns = [
-      /Round\s+Off\s*:?\s*([\d.]+)/i,
-      /Round\s*Off\s*([\d.]+)/i
-    ];
-    
-    for (const pattern of roundOffPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.roundOff = parseFloat(match[1]);
-        break;
+    const roundOffIndex = ocrText.toLowerCase().indexOf('round off');
+    if (roundOffIndex !== -1) {
+      const afterRoundOff = ocrText.substring(roundOffIndex + 8).trim();
+      const numberMatch = afterRoundOff.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.roundOff = safeParseFloat(numberMatch[0]);
       }
     }
 
     // Extract grand total
-    const grandTotalPatterns = [
-      /Grand\s+Total\s*:?\s*([\d.]+)/i,
-      /GRAND\s+TOTAL\s*:?\s*([\d.]+)/i,
-      /Total\s*:?\s*([\d.]+)/i
-    ];
-    
-    for (const pattern of grandTotalPatterns) {
-      const match = ocrText.match(pattern);
-      if (match) {
-        billData.grandTotal = parseFloat(match[1]);
-        break;
+    const grandTotalIndex = ocrText.toLowerCase().indexOf('grand total');
+    if (grandTotalIndex !== -1) {
+      const afterGrandTotal = ocrText.substring(grandTotalIndex + 11).trim();
+      const numberMatch = afterGrandTotal.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.grandTotal = safeParseFloat(numberMatch[0]);
       }
     }
-  }
-
-  private extractDoctorDetails(doctorInfo: string): { name: string, specialization: string } {
-    // Common doctor specializations
-    const specializations = [
-      'MD', 'MBBS', 'MS', 'MCh', 'DM', 'DNB', 'FRCS', 'MRCP',
-      'Cardiologist', 'Dermatologist', 'Neurologist', 'Orthopedist',
-      'Pediatrician', 'Gynecologist', 'Psychiatrist', 'General Physician',
-      'ENT', 'Ophthalmologist', 'Urologist', 'Gastroenterologist'
-    ];
-
-    let name = doctorInfo;
-    let specialization = '';
-
-    // Try to extract specialization
-    for (const spec of specializations) {
-      if (doctorInfo.includes(spec)) {
-        specialization = spec;
-        name = doctorInfo.replace(spec, '').trim();
-        break;
-      }
-    }
-
-    // Clean up the name
-    name = name.replace(/^(dr\.?\s*|doctor\s*)/i, '').trim();
-
-    return { name, specialization };
   }
 
   /**

@@ -63,6 +63,8 @@ export class FileProcessingService {
     parsedFile.fileType = fileType;
     parsedFile.fileSize = file.size;
     parsedFile.mimeType = file.mimetype;
+    parsedFile.filePath = filePath; // Add the missing filePath field
+    parsedFile.fileHash = fileHash; // Add the missing fileHash field
     parsedFile.processingStatus = ProcessingStatus.PROCESSING;
     parsedFile.processingDurationMs = 0;
     parsedFile.characterCount = 0;
