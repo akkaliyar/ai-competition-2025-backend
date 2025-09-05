@@ -179,4 +179,19 @@ export class ImagePreprocessingService {
       resolutionEnhancement: true
     });
   }
+
+  /**
+   * Specialized preprocessing for medical bills and invoices (optimized for table text)
+   */
+  async preprocessMedicalBill(imageBuffer: Buffer, filename: string): Promise<PreprocessingResult> {
+    return this.preprocessForOCR(imageBuffer, filename, {
+      grayscale: true,           // Convert to grayscale for better text recognition
+      binarization: false,       // Keep grayscale (not pure B&W) for better table detection
+      noiseReduction: true,      // Remove scan artifacts and noise
+      contrastEnhancement: true, // Enhance text visibility
+      deskew: false,            // Skip deskewing for speed (assume straight images)
+      sharpen: true,            // Sharpen text edges for better character recognition
+      resolutionEnhancement: true // Upscale small images for better OCR
+    });
+  }
 }

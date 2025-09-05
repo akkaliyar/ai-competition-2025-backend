@@ -206,6 +206,32 @@ export class FileProcessingService {
     }
   }
 
+  /**
+   * Get optimized Tesseract configuration for medical bills
+   */
+  private getMedicalBillTesseractConfig(): any {
+    return {
+      logger: (m: any) => {
+        if (m.status === 'recognizing text') {
+          // OCR progress
+        }
+      },
+      // Enhanced OCR configuration for medical bills
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;()[]{}@#$%&*+-/=<>?!"\'\\|~`^_ \n\t',
+      tessedit_pageseg_mode: '6', // Assume uniform block of text
+      preserve_interword_spaces: '1', // Preserve spaces between words
+      tessedit_ocr_engine_mode: '3', // Default neural nets LSTM engine
+      tessedit_do_invert: '0', // Don't invert image
+      textord_min_linesize: '2.0', // Minimum line size
+      textord_tabfind_show_vlines: '0', // Don't show vertical lines
+      classify_enable_learning: '1', // Enable learning
+      classify_enable_adaptive_matcher: '1', // Enable adaptive matching
+      // Medical bill specific patterns
+      user_words_suffix: 'user-words',
+      user_patterns_suffix: 'user-patterns'
+    };
+  }
+
   private async processImageEnhanced(file: Express.Multer.File, parsedFileId: number): Promise<{ text: string; ocrResult: OcrResult | null }> {
     const startTime = Date.now();
     
@@ -216,24 +242,23 @@ export class FileProcessingService {
     ocrResult.overallConfidence = 0;
     ocrResult.processingTimeMs = 0;
     ocrResult.ocrEngine = 'tesseract';
+    ocrResult.ocrVersion = '5.0.0'; // Tesseract version
+    ocrResult.language = 'eng';
     ocrResult.createdAt = new Date();
     // OCR result created
     
     try {
-      const result = await Tesseract.recognize(file.buffer, 'eng', {
-          logger: (m) => {
-            if (m.status === 'recognizing text') {
-            // OCR progress
-          }
-        }
-      });
+      // Preprocess the image for better OCR accuracy (specialized for medical bills)
+      const preprocessingResult = await this.imagePreprocessingService.preprocessMedicalBill(file.buffer, file.originalname);
+      
+      const result = await Tesseract.recognize(preprocessingResult.processedBuffer, 'eng', this.getMedicalBillTesseractConfig());
       
       const extractedText = result.data.text.trim();
       const processingTime = Date.now() - startTime;
       
       // Populate OCR result with successful data
       ocrResult.rawText = extractedText || 'No text detected in image';
-      ocrResult.overallConfidence = result.data.confidence || 0;
+      ocrResult.overallConfidence = (result.data.confidence || 0) + preprocessingResult.confidenceBoost;
       ocrResult.processingTimeMs = processingTime;
       
       // Save OCR result
@@ -282,16 +307,21 @@ export class FileProcessingService {
     ocrResult.overallConfidence = 0;
     ocrResult.processingTimeMs = 0;
     ocrResult.ocrEngine = 'google-vision';
+    ocrResult.ocrVersion = 'v1'; // Google Vision API version
+    ocrResult.language = 'en';
     ocrResult.createdAt = new Date();
     // OCR result created
     
     try {
-      const visionResult = await this.googleVisionService.extractTableFromImage(file.buffer);
+      // Preprocess the image for better OCR accuracy (specialized for medical bills)
+      const preprocessingResult = await this.imagePreprocessingService.preprocessMedicalBill(file.buffer, file.originalname);
+      
+      const visionResult = await this.googleVisionService.extractTableFromImage(preprocessingResult.processedBuffer);
       const processingTime = Date.now() - startTime;
       
       // Populate OCR result
       ocrResult.rawText = visionResult.text;
-      ocrResult.overallConfidence = visionResult.confidence;
+      ocrResult.overallConfidence = visionResult.confidence + preprocessingResult.confidenceBoost;
       ocrResult.processingTimeMs = processingTime;
       
       // Save OCR result

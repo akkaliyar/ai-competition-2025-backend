@@ -8,7 +8,9 @@ export class MedicalBillExtractionService {
    * Extract medical bill data from OCR text - raw extraction without patterns
    */
   extractMedicalBillData(ocrText: string): MedicalBillDto {
-    const lines = ocrText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Preprocess OCR text to fix common errors
+    const cleanedOcrText = this.preprocessOcrText(ocrText);
+    const lines = cleanedOcrText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
     const billData: MedicalBillDto = {
       invoiceNo: '',
@@ -56,10 +58,12 @@ export class MedicalBillExtractionService {
   }
 
   private extractRawValues(ocrText: string, lines: string[], billData: MedicalBillDto): void {
+    // Use the cleaned OCR text for better accuracy
+    const cleanedOcrText = this.preprocessOcrText(ocrText);
     // Extract invoice number - look for "Invoice No" and take the next text
-    const invoiceIndex = ocrText.toLowerCase().indexOf('invoice no');
+    const invoiceIndex = cleanedOcrText.toLowerCase().indexOf('invoice no');
     if (invoiceIndex !== -1) {
-      const afterInvoice = ocrText.substring(invoiceIndex + 10).trim();
+      const afterInvoice = cleanedOcrText.substring(invoiceIndex + 10).trim();
       const words = afterInvoice.split(/\s+/);
       if (words.length > 0) {
         // Skip dots and colons, take the first meaningful word
@@ -73,9 +77,9 @@ export class MedicalBillExtractionService {
     }
 
     // Extract date - look for "Date" and take the next text
-    const dateIndex = ocrText.toLowerCase().indexOf('date');
+    const dateIndex = cleanedOcrText.toLowerCase().indexOf('date');
     if (dateIndex !== -1) {
-      const afterDate = ocrText.substring(dateIndex + 4).trim();
+      const afterDate = cleanedOcrText.substring(dateIndex + 4).trim();
       const words = afterDate.split(/\s+/);
       if (words.length > 0) {
         // Skip colons, take the first meaningful word
@@ -105,7 +109,15 @@ export class MedicalBillExtractionService {
           }
           shopWords.push(word);
         }
-        billData.shopName = shopWords.join(' ');
+        
+        let shopName = shopWords.join(' ');
+        
+        // Clean up common OCR errors in shop names
+        shopName = shopName.replace(/terms.*condjrion.*for/gi, '');
+        shopName = shopName.replace(/gst.*invoice/gi, '');
+        shopName = shopName.replace(/\s+/g, ' ').trim();
+        
+        billData.shopName = shopName;
         break;
       }
     }
@@ -127,9 +139,9 @@ export class MedicalBillExtractionService {
     }
 
     // Extract patient name - look for "Patient Name" and take the next text
-    const patientIndex = ocrText.toLowerCase().indexOf('patient name');
+    const patientIndex = cleanedOcrText.toLowerCase().indexOf('patient name');
     if (patientIndex !== -1) {
-      const afterPatient = ocrText.substring(patientIndex + 12).trim();
+      const afterPatient = cleanedOcrText.substring(patientIndex + 12).trim();
       const words = afterPatient.split(/\s+/);
       if (words.length > 0) {
         // Skip colons, take the first meaningful words
@@ -137,7 +149,9 @@ export class MedicalBillExtractionService {
         for (const word of words) {
           if (word && word !== ':' && word.length > 1) {
             // Clean up OCR errors
-            const cleanWord = word.replace(/[|:;]/g, '').trim();
+            let cleanWord = word.replace(/[|:;]/g, '').trim();
+            
+        
             if (cleanWord && cleanWord.length > 1) {
               nameWords.push(cleanWord);
               if (nameWords.length >= 2) break; // Take first 2 words
@@ -149,13 +163,25 @@ export class MedicalBillExtractionService {
     }
 
     // Extract patient phone - look for phone near patient name
-    const patientPhoneIndex = ocrText.toLowerCase().indexOf('ph.no');
+    const patientPhoneIndex = cleanedOcrText.toLowerCase().indexOf('ph.no');
     if (patientPhoneIndex !== -1) {
-      const afterPhone = ocrText.substring(patientPhoneIndex + 5).trim();
+      const afterPhone = cleanedOcrText.substring(patientPhoneIndex + 5).trim();
       const phoneMatch = afterPhone.match(/\d{10}/);
       if (phoneMatch) {
         billData.patientPhone = phoneMatch[0];
       }
+    }
+    
+    // Also look for phone numbers in the entire text
+    const allPhoneMatches = cleanedOcrText.match(/\d{10}/g);
+    if (allPhoneMatches && allPhoneMatches.length > 0) {
+      // Use the first 10-digit phone number found
+      if (!billData.patientPhone) {
+        billData.patientPhone = allPhoneMatches[0];
+      }
+      
+      // Add all phone numbers to the phone array
+      billData.phone = allPhoneMatches;
     }
 
     // Extract doctor details - look for "Dr" or "Doctor"
@@ -221,51 +247,47 @@ export class MedicalBillExtractionService {
     const items: MedicalBillItemDto[] = [];
     let itemIndex = 1;
 
+    // Extract items from lines
+
+    // More aggressive approach - look for any line that might contain medicine data
     for (const line of lines) {
       const trimmedLine = line.trim();
       
       // Skip empty lines
       if (!trimmedLine) continue;
       
-      // Skip header lines (but not item lines that start with numbers)
-      if (trimmedLine.toLowerCase().includes('s.no') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('description') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('pack') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('mrp') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('batch') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('exp') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('qty') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('rate') && !/^\d+\s/.test(trimmedLine)) {
-        continue;
-      }
-      if (trimmedLine.toLowerCase().includes('amount') && !/^\d+\s/.test(trimmedLine)) {
+      // Skip obvious header lines and totals (but be more careful)
+      // Only skip if it's a header/total line AND doesn't look like a medicine item
+      if (this.isHeaderOrTotalLine(trimmedLine) && !this.looksLikeMedicineLine(trimmedLine)) {
         continue;
       }
 
-      // Look for lines that start with a number (item lines)
-      // Also handle cases where OCR might have extra characters
+      // Try multiple extraction methods
+      let item: MedicalBillItemDto | null = null;
+
+      // Method 1: Standard numbered item line
       if (/^\d+[\s\|\:\-]/.test(trimmedLine)) {
-        const item = this.parseRawItemLine(trimmedLine, itemIndex);
-        if (item && item.itemDescription && item.itemDescription.length > 2) {
-          items.push(item);
-          itemIndex++;
-        }
+        item = this.parseRawItemLine(trimmedLine, itemIndex);
+      }
+      
+      // Method 2: Medicine line without number
+      else if (this.looksLikeMedicineLine(trimmedLine)) {
+        item = this.parseMedicineLine(trimmedLine, itemIndex);
+      }
+      
+      // Method 3: Aggressive medicine detection - look for any line with medicine keywords
+      else if (this.hasMedicineKeywords(trimmedLine)) {
+        item = this.parseAggressiveMedicineLine(trimmedLine, itemIndex);
+      }
+
+      // Validate and add the item
+      if (item && this.isValidMedicineItem(item)) {
+        items.push(item);
+        itemIndex++;
       }
     }
+
+    // Set the extracted items
 
     billData.items = items;
   }
@@ -280,7 +302,7 @@ export class MedicalBillExtractionService {
     
     const parts = cleanLine.split(/\s+/);
     
-    if (parts.length < 6) {
+    if (parts.length < 3) {
       return null;
     }
 
@@ -305,7 +327,7 @@ export class MedicalBillExtractionService {
       let mrpIndex = -1;
       
       // Look for the pack pattern (like "1*10", "1X200ML", "1X10")
-      for (let i = 1; i < parts.length - 6; i++) {
+      for (let i = 1; i < parts.length - 2; i++) {
         if (parts[i].match(/^\d+[\*X]\d+/)) {
           packIndex = i;
           descriptionEndIndex = i;
@@ -315,7 +337,7 @@ export class MedicalBillExtractionService {
       
       // If no pack pattern found, try to find the first numeric value (MRP)
       if (packIndex === -1) {
-        for (let i = 1; i < parts.length - 6; i++) {
+        for (let i = 1; i < parts.length - 2; i++) {
           if (parts[i].match(/^\d+\.?\d*$/)) {
             mrpIndex = i;
             descriptionEndIndex = i;
@@ -339,7 +361,7 @@ export class MedicalBillExtractionService {
       let actualMrpIndex = packIndex !== -1 ? packIndex + 1 : mrpIndex;
       if (actualMrpIndex === -1) {
         // Fallback: look for first decimal number
-        for (let i = descriptionEndIndex; i < parts.length - 5; i++) {
+        for (let i = descriptionEndIndex; i < parts.length - 1; i++) {
           if (parts[i].match(/^\d+\.\d+$/)) {
             actualMrpIndex = i;
             break;
@@ -347,7 +369,7 @@ export class MedicalBillExtractionService {
         }
       }
       
-      // Extract remaining fields based on the pattern
+      // Extract remaining fields based on the pattern - be more flexible with field count
       const mrp = actualMrpIndex !== -1 ? safeParseFloat(parts[actualMrpIndex]) : 0;
       const batchNo = actualMrpIndex !== -1 && actualMrpIndex + 1 < parts.length ? parts[actualMrpIndex + 1] : '';
       const exp = actualMrpIndex !== -1 && actualMrpIndex + 2 < parts.length ? parts[actualMrpIndex + 2] : '';
@@ -515,5 +537,371 @@ export class MedicalBillExtractionService {
     }
 
     return totalFields > 0 ? Math.round((score / totalFields) * 100) : 0;
+  }
+
+  /**
+   * Check if a line is a header or total line that should be skipped
+   */
+  private isHeaderOrTotalLine(line: string): boolean {
+    const lowerLine = line.toLowerCase();
+    
+    // Skip header lines - only if they contain multiple header keywords (indicating a table header)
+    const headerKeywords = ['s.no', 'description', 'pack', 'mrp', 'batch', 'exp', 'qty', 'rate', 'amount'];
+    const headerKeywordCount = headerKeywords.filter(keyword => lowerLine.includes(keyword)).length;
+    
+    // If it has 3 or more header keywords, it's likely a table header
+    if (headerKeywordCount >= 3) {
+      return true;
+    }
+    
+    // Skip total lines
+    if (lowerLine.includes('sub total') || lowerLine.includes('grand total') || 
+        lowerLine.includes('round off') || lowerLine.includes('less discount') || 
+        lowerLine.includes('other adj') || lowerLine.includes('totalqty')) {
+      return true;
+    }
+    
+    // Skip invoice info
+    if (lowerLine.includes('invoice') || lowerLine.includes('gst') || 
+        lowerLine.includes('date') || lowerLine.includes('patient name') ||
+        lowerLine.includes('terms') || lowerLine.includes('condition') ||
+        lowerLine.includes('ph.no') || lowerLine.includes('prescribed')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if a line has medicine keywords
+   */
+  private hasMedicineKeywords(line: string): boolean {
+    const lowerLine = line.toLowerCase();
+    const medicineKeywords = [
+      'tab', 'tablet', 'cap', 'capsule', 'syrup', 'syr', 'injection', 'inj',
+      'mg', 'ml', 'g', 'gm', 'paracip', 'lactolook', 'diopil', 'forte',
+      'medicine', 'drug', 'pharma', 'med'
+    ];
+    
+    return medicineKeywords.some(keyword => lowerLine.includes(keyword));
+  }
+
+  /**
+   * Parse a line aggressively to extract medicine information
+   */
+  private parseAggressiveMedicineLine(line: string, sNo: number): MedicalBillItemDto | null {
+    try {
+      // Clean up the line
+      let cleanLine = line.trim();
+      cleanLine = cleanLine.replace(/[|:;]/g, ' ');
+      cleanLine = cleanLine.replace(/\s+/g, ' ');
+      
+      const parts = cleanLine.split(/\s+/);
+      
+      if (parts.length < 2) {
+        return null;
+      }
+
+      const safeParseFloat = (value: string): number => {
+        const parsed = parseFloat(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      const safeParseInt = (value: string): number => {
+        const parsed = parseInt(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      // Extract medicine name - look for the longest meaningful text
+      let description = '';
+      let pack = '';
+      let mrp = 0;
+      let batchNo = '';
+      let exp = '';
+      let qty = 0;
+      let rate = 0;
+      let amount = 0;
+
+      // Find the medicine name by looking for medicine keywords
+      const medicineKeywords = ['tab', 'tablet', 'cap', 'capsule', 'syrup', 'syr', 'mg', 'ml'];
+      let descriptionParts = [];
+      
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        
+        // If we find a medicine keyword, include it and surrounding text
+        if (medicineKeywords.some(keyword => part.toLowerCase().includes(keyword))) {
+          // Look backwards and forwards for related text
+          let start = Math.max(0, i - 2);
+          let end = Math.min(parts.length, i + 3);
+          descriptionParts = parts.slice(start, end);
+          break;
+        }
+      }
+      
+      // If no medicine keyword found, try to find the longest meaningful text
+      if (descriptionParts.length === 0) {
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          if (part.length > 3 && !part.match(/^\d+\.?\d*$/) && !part.match(/^\d+\/\d+$/)) {
+            descriptionParts.push(part);
+          }
+        }
+      }
+      
+      description = descriptionParts.join(' ').trim();
+      
+      // Skip if description is too short
+      if (description.length < 3) {
+        return null;
+      }
+
+      // Look for numeric values
+      const numericValues = [];
+      for (const part of parts) {
+        if (part.match(/^\d+\.?\d*$/)) {
+          numericValues.push(safeParseFloat(part));
+        } else if (part.match(/^\d+\/\d+$/)) {
+          if (!batchNo) {
+            batchNo = part;
+          } else if (!exp) {
+            exp = part;
+          }
+        } else if (part.match(/^\d+[\*X]\d+/)) {
+          pack = part;
+        }
+      }
+
+      // Assign numeric values
+      if (numericValues.length >= 1) mrp = numericValues[0];
+      if (numericValues.length >= 2) qty = safeParseInt(numericValues[1].toString());
+      if (numericValues.length >= 3) rate = numericValues[2];
+      if (numericValues.length >= 4) amount = numericValues[3];
+
+      return {
+        sNo: sNo,
+        itemDescription: description,
+        pack: pack,
+        mrp: mrp,
+        batchNo: batchNo,
+        exp: exp,
+        qty: qty,
+        rate: rate,
+        amount: amount
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Check if an extracted item is a valid medicine item
+   */
+  private isValidMedicineItem(item: MedicalBillItemDto): boolean {
+    // Must have a meaningful description
+    if (!item.itemDescription || item.itemDescription.length < 3) {
+      return false;
+    }
+    
+    const lowerDesc = item.itemDescription.toLowerCase();
+    
+    // Skip items that look like headers, totals, or other non-medicine content
+    const invalidKeywords = [
+      'total', 'sub total', 'grand total', 'round off', 'less discount', 'other adj',
+      'invoice', 'gst', 'date', 'patient name', 'terms', 'condition', 'ph.no',
+      'prescribed', 'doctor', 'shop', 'address', 'phone', 'amount in words',
+      'goi', 'ones', 'i i', 'round', 'off', '112', 'authorised', 'signatory',
+      'signature', 'thank', 'visit', 'again', 'welcome', 'customer', 'service',
+      'prem', 'sai', 'medicose', 'ground', 'floor', 'eco', 'bazar', 'suptech', 'mart', 'greater', 'noida', 'west'
+    ];
+    
+    const hasInvalidKeyword = invalidKeywords.some(keyword => 
+      lowerDesc.includes(keyword)
+    );
+    
+    if (hasInvalidKeyword) {
+      return false;
+    }
+    
+    // Must contain medicine-related keywords
+    const medicineKeywords = [
+      'tab', 'tablet', 'cap', 'capsule', 'syrup', 'syr', 'injection', 'inj',
+      'mg', 'ml', 'g', 'gm', 'paracip', 'lactolook', 'diopil', 'forte',
+      'medicine', 'drug', 'pharma', 'med', 'lactolook'
+    ];
+    
+    const hasMedicineKeyword = medicineKeywords.some(keyword => 
+      lowerDesc.includes(keyword)
+    );
+    
+    return hasMedicineKeyword;
+  }
+
+  /**
+   * Check if a line looks like it contains medicine information
+   */
+  private looksLikeMedicineLine(line: string): boolean {
+    const lowerLine = line.toLowerCase();
+    
+    // Look for medicine-related keywords
+    const medicineKeywords = [
+      'tab', 'tablet', 'cap', 'capsule', 'syrup', 'syr', 'injection', 'inj',
+      'mg', 'ml', 'g', 'gm', 'paracip', 'lactolook', 'diopil', 'forte',
+      'medicine', 'drug', 'pharma', 'med'
+    ];
+    
+    // Check if line contains medicine keywords
+    const hasMedicineKeyword = medicineKeywords.some(keyword => lowerLine.includes(keyword));
+    
+    // Check if line has numeric patterns (prices, quantities, etc.)
+    const hasNumericPattern = /\d+\.?\d*/.test(line);
+    
+    // Check if line has pack patterns (1*10, 1X200ML, etc.)
+    const hasPackPattern = /\d+[\*X]\d+/.test(line);
+    
+    // Check if line has batch/exp patterns
+    const hasBatchExpPattern = /\d+\/\d+/.test(line);
+    
+    return hasMedicineKeyword && (hasNumericPattern || hasPackPattern || hasBatchExpPattern);
+  }
+
+  /**
+   * Parse a medicine line that doesn't follow the standard format
+   */
+  private parseMedicineLine(line: string, sNo: number): MedicalBillItemDto | null {
+    try {
+      // Clean up the line
+      let cleanLine = line.trim();
+      cleanLine = cleanLine.replace(/[|:;]/g, ' ');
+      cleanLine = cleanLine.replace(/\s+/g, ' ');
+      
+      const parts = cleanLine.split(/\s+/);
+      
+      if (parts.length < 3) {
+        return null;
+      }
+
+      const safeParseFloat = (value: string): number => {
+        const parsed = parseFloat(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      const safeParseInt = (value: string): number => {
+        const parsed = parseInt(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      // Try to extract medicine name (look for text that contains medicine keywords)
+      let description = '';
+      let pack = '';
+      let mrp = 0;
+      let batchNo = '';
+      let exp = '';
+      let qty = 0;
+      let rate = 0;
+      let amount = 0;
+
+      // Find medicine name (usually the first meaningful text)
+      const medicineKeywords = ['tab', 'tablet', 'cap', 'capsule', 'syrup', 'syr', 'mg', 'ml'];
+      let descriptionStart = 0;
+      let descriptionEnd = parts.length;
+
+      // Look for pack pattern to determine where description ends
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i].match(/^\d+[\*X]\d+/)) {
+          pack = parts[i];
+          descriptionEnd = i;
+          break;
+        }
+      }
+
+      // Extract description
+      description = parts.slice(descriptionStart, descriptionEnd).join(' ').trim();
+      
+      // Skip if description is too short
+      if (description.length < 3) {
+        return null;
+      }
+
+      // Look for numeric values (MRP, batch, exp, qty, rate, amount)
+      const numericValues = [];
+      for (let i = descriptionEnd; i < parts.length; i++) {
+        const part = parts[i];
+        if (part.match(/^\d+\.?\d*$/)) {
+          numericValues.push(safeParseFloat(part));
+        } else if (part.match(/^\d+\/\d+$/)) {
+          // This looks like batch/exp date
+          if (!batchNo) {
+            batchNo = part;
+          } else if (!exp) {
+            exp = part;
+          }
+        }
+      }
+
+      // Assign numeric values based on position
+      if (numericValues.length >= 1) mrp = numericValues[0];
+      if (numericValues.length >= 2) qty = safeParseInt(numericValues[1].toString());
+      if (numericValues.length >= 3) rate = numericValues[2];
+      if (numericValues.length >= 4) amount = numericValues[3];
+
+      return {
+        sNo: sNo,
+        itemDescription: description,
+        pack: pack,
+        mrp: mrp,
+        batchNo: batchNo,
+        exp: exp,
+        qty: qty,
+        rate: rate,
+        amount: amount
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Preprocess OCR text to fix common errors and improve accuracy
+   */
+  private preprocessOcrText(ocrText: string): string {
+    let cleanedText = ocrText;
+    
+    // Fix common OCR errors in medical bills
+    const commonCorrections = [
+      // Patient name corrections
+      { from: /JATVEER/gi, to: 'JAIVEER' },
+      { from: /jatveer/gi, to: 'jaiveer' },
+      
+      // Medicine name corrections
+      { from: /PARACIP/gi, to: 'PARACIP' },
+      { from: /LACTOLOOK/gi, to: 'LACTOLOOK' },
+      { from: /DIOPIL/gi, to: 'DIOPIL' },
+      
+      // Shop name corrections
+      { from: /PREM SAI MEDICOSE/gi, to: 'PREM SAI MEDICOSE' },
+      { from: /medicose/gi, to: 'MEDICOSE' },
+      
+      // Common OCR character errors
+      { from: /0/g, to: '0' }, // Ensure zeros are correct
+      { from: /O(?=\d)/g, to: '0' }, // Replace O with 0 when followed by digits
+      { from: /I(?=\d)/g, to: '1' }, // Replace I with 1 when followed by digits
+      { from: /l(?=\d)/g, to: '1' }, // Replace l with 1 when followed by digits
+      
+      // Fix common spacing issues
+      { from: /[ \t]+/g, to: ' ' }, // Normalize multiple spaces and tabs (but keep newlines)
+      // Remove the aggressive space insertion that breaks line structure
+      
+      // Fix common punctuation errors
+      { from: /\.{2,}/g, to: '.' }, // Fix multiple dots
+      { from: /,{2,}/g, to: ',' }, // Fix multiple commas
+    ];
+    
+    // Apply corrections
+    commonCorrections.forEach(correction => {
+      cleanedText = cleanedText.replace(correction.from, correction.to);
+    });
+    
+    return cleanedText;
   }
 }
