@@ -12,6 +12,8 @@ export class MedicalBillExtractionService {
     const cleanedOcrText = this.preprocessOcrText(ocrText);
     const lines = cleanedOcrText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
+    // Extract medical bill data from OCR text
+    
     const billData: MedicalBillDto = {
       invoiceNo: '',
       date: '',
@@ -139,17 +141,16 @@ export class MedicalBillExtractionService {
     }
 
     // Extract shop address - look for address keywords
+    const addressKeywords = ['shop', 'floor', 'bazar', 'mart', 'noida', 'west', 'ground', 'eco', 'suptech', 'greater'];
     for (const line of lines) {
-      if (line.toLowerCase().includes('shop') || 
-          line.toLowerCase().includes('address') ||
-          line.toLowerCase().includes('floor')) {
+      if (addressKeywords.some(keyword => line.toLowerCase().includes(keyword)) && line.length > 20) {
         billData.shopAddress = line;
         break;
       }
     }
 
     // Extract phone numbers - find all 10-digit numbers
-    const phoneMatches = ocrText.match(/\d{10}/g);
+    const phoneMatches = cleanedOcrText.match(/\d{10}/g);
     if (phoneMatches) {
       billData.phone = [...new Set(phoneMatches)];
     }
@@ -238,12 +239,12 @@ export class MedicalBillExtractionService {
     this.extractRawItems(lines, billData);
 
     // Extract totals - look for total keywords
-    this.extractRawTotals(ocrText, billData);
+    this.extractRawTotals(cleanedOcrText, billData);
 
     // Extract amount in words - look for "Amount in Words" or similar
-    const amountWordsIndex = ocrText.toLowerCase().indexOf('amount in words');
+    const amountWordsIndex = cleanedOcrText.toLowerCase().indexOf('amount in words');
     if (amountWordsIndex !== -1) {
-      const afterAmount = ocrText.substring(amountWordsIndex + 15).trim();
+      const afterAmount = cleanedOcrText.substring(amountWordsIndex + 15).trim();
       const words = afterAmount.split(/\s+/);
       if (words.length > 0) {
         // Take the first few words that look like amount in words

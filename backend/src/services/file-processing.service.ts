@@ -244,6 +244,9 @@ export class FileProcessingService {
     ocrResult.ocrEngine = 'tesseract';
     ocrResult.ocrVersion = '5.0.0'; // Tesseract version
     ocrResult.language = 'eng';
+    ocrResult.characterCount = 0;
+    ocrResult.wordCount = 0;
+    ocrResult.lineCount = 0;
     ocrResult.createdAt = new Date();
     // OCR result created
     
@@ -260,6 +263,9 @@ export class FileProcessingService {
       ocrResult.rawText = extractedText || 'No text detected in image';
       ocrResult.overallConfidence = (result.data.confidence || 0) + preprocessingResult.confidenceBoost;
       ocrResult.processingTimeMs = processingTime;
+      ocrResult.characterCount = (extractedText || '').length;
+      ocrResult.wordCount = (extractedText || '').split(/\s+/).length;
+      ocrResult.lineCount = (extractedText || '').split('\n').length;
       
       // Save OCR result
       const savedOcrResult = await this.ocrResultRepository.save(ocrResult);
@@ -309,6 +315,9 @@ export class FileProcessingService {
     ocrResult.ocrEngine = 'google-vision';
     ocrResult.ocrVersion = 'v1'; // Google Vision API version
     ocrResult.language = 'en';
+    ocrResult.characterCount = 0;
+    ocrResult.wordCount = 0;
+    ocrResult.lineCount = 0;
     ocrResult.createdAt = new Date();
     // OCR result created
     
@@ -323,6 +332,9 @@ export class FileProcessingService {
       ocrResult.rawText = visionResult.text;
       ocrResult.overallConfidence = visionResult.confidence + preprocessingResult.confidenceBoost;
       ocrResult.processingTimeMs = processingTime;
+      ocrResult.characterCount = (visionResult.text || '').length;
+      ocrResult.wordCount = (visionResult.text || '').split(/\s+/).length;
+      ocrResult.lineCount = (visionResult.text || '').split('\n').length;
       
       // Save OCR result
       const savedOcrResult = await this.ocrResultRepository.save(ocrResult);
