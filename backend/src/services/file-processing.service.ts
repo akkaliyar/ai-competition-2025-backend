@@ -79,7 +79,6 @@ export class FileProcessingService {
     try {
       // Save initial record
       const savedFile = await this.parsedFileRepository.save(parsedFile);
-
       let extractedText = '';
       let parsedContent: any = {};
       let ocrResult: OcrResult | null = null;
@@ -131,6 +130,7 @@ export class FileProcessingService {
       // Extract and store bill data automatically
       try {
         await this.billExtractionService.extractAndStoreBillData(finalFile);
+        
       } catch (billError) {
         // Don't fail the entire process if bill extraction fails
       }

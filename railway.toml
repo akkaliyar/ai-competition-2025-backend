@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm run start:railway:health"
+startCommand = "npm run start:prod"
 healthcheckPath = "/healthz"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
@@ -16,14 +16,13 @@ interval = 10
 retries = 3
 startPeriod = 15
 
-# Health check server is now the primary startup command
-# This ensures Railway always gets a healthy response
+# Main application startup command
+# The application includes built-in health check endpoints at /healthz and /health
 
 [env]
 NODE_ENV = "production"
 SERVICE_TYPE = "backend"
 PORT = "8080"
-HEALTH_PORT = "3001"  # Health server port (separate from main app)
 
 # Database variables should be set manually in Railway dashboard
 # See RAILWAY_ENV_SETUP.md for instructions

@@ -109,7 +109,7 @@ export class FileUploadController {
 
       // Starting file processing
       result = await this.fileProcessingService.processFile(file, requestInfo);
-      
+     
       // Check if this is a medical bill and extract structured data
       if (result.extractedText && this.medicalBillExtractionService.isMedicalBill(result.extractedText)) {
         try {
