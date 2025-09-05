@@ -42,19 +42,35 @@ export class MedicalBillExtractionService {
     const medicalKeywords = [
       'medical', 'medicine', 'pharmacy', 'pharmacist', 'prescription', 'prescribed',
       'doctor', 'dr.', 'patient', 'clinic', 'hospital', 'medicose', 'tab', 'cap',
-      'syrup', 'injection', 'mg', 'ml', 'batch', 'exp', 'mrp', 'qty', 'rate'
+      'syrup', 'injection', 'mg', 'ml', 'batch', 'exp', 'mrp', 'qty', 'rate',
+      'paracip', 'lactolook', 'diopil', 'forte', 'syr', 'tab', 'medicose'
     ];
 
     const billKeywords = [
       'invoice', 'bill', 'receipt', 'total', 'amount', 'grand total', 'sub total',
-      'discount', 'tax', 'gst', 'vat'
+      'discount', 'tax', 'gst', 'vat', 'less discount', 'round off', 'other adj'
     ];
 
     const text = ocrText.toLowerCase();
     const medicalScore = medicalKeywords.filter(keyword => text.includes(keyword)).length;
     const billScore = billKeywords.filter(keyword => text.includes(keyword)).length;
 
-    return medicalScore >= 3 && billScore >= 2;
+    // More lenient criteria for Railway OCR
+    // If we have medicine names or medical terms, it's likely a medical bill
+    const hasMedicineNames = text.includes('paracip') || text.includes('lactolook') || 
+                           text.includes('diopil') || text.includes('medicose');
+    
+    // If we have bill structure (totals, amounts), it's likely a bill
+    const hasBillStructure = text.includes('total') || text.includes('amount') || 
+                           text.includes('mrp') || text.includes('qty');
+
+    // More flexible scoring - accept if we have either:
+    // 1. Traditional scoring (3+ medical + 2+ bill keywords)
+    // 2. Medicine names + bill structure
+    // 3. Lower threshold for Railway OCR quality
+    return (medicalScore >= 3 && billScore >= 2) || 
+           (hasMedicineNames && hasBillStructure) ||
+           (medicalScore >= 2 && billScore >= 1);
   }
 
   private extractRawValues(ocrText: string, lines: string[], billData: MedicalBillDto): void {

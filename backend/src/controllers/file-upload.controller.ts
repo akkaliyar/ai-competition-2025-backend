@@ -111,7 +111,9 @@ export class FileUploadController {
       result = await this.fileProcessingService.processFile(file, requestInfo);
      
       // Check if this is a medical bill and extract structured data
-      if (result.extractedText && this.medicalBillExtractionService.isMedicalBill(result.extractedText)) {
+      const isMedicalBill = result.extractedText ? this.medicalBillExtractionService.isMedicalBill(result.extractedText) : false;
+      
+      if (result.extractedText && isMedicalBill) {
         try {
           const medicalBillData = this.medicalBillExtractionService.extractMedicalBillData(result.extractedText);
           const validation = this.medicalBillExtractionService.validateMedicalBill(medicalBillData);
@@ -158,7 +160,14 @@ export class FileUploadController {
       if (result && result.id) {
         await this.cleanupFailedUpload(result.id);
       }
-      throw new BadRequestException('Uploaded file does not appear to be a medical bill. Please upload a medical bill image.');
+      // Provide more detailed error information for debugging
+      const debugInfo = result.extractedText ? {
+        textLength: result.extractedText.length,
+        textPreview: result.extractedText.substring(0, 200) + '...',
+        isMedicalBill: isMedicalBill
+      } : { textLength: 0, textPreview: 'No text extracted', isMedicalBill: false };
+      
+      throw new BadRequestException(`Uploaded file does not appear to be a medical bill. Debug info: ${JSON.stringify(debugInfo)}`);
     } catch (error) {
       // Clean up any partially created records
       if (result && result.id) {
