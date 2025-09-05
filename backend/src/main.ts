@@ -33,7 +33,6 @@ const createHealthCheckServer = (port: number) => {
     }
     
     if (req.url === '/healthz' && req.method === 'GET') {
-      console.log('🔍 Railway health check (HTTP server)');
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('OK');
     } else if (req.url === '/ping' && req.method === 'GET') {
@@ -70,9 +69,7 @@ const createHealthCheckServer = (port: number) => {
   });
 
   server.listen(port, '0.0.0.0', () => {
-    console.log(`✅ Health check server started on port ${port}`);
-    console.log(`🔗 Railway health check available at: http://0.0.0.0:${port}/healthz`);
-    console.log(`🔗 API endpoints available at: http://0.0.0.0:${port}/api/files`);
+    // Health check server started
   });
 
   return server;
@@ -95,9 +92,7 @@ async function bootstrap() {
   const healthServer = createHealthCheckServer(port);
 
   try {
-    console.log('🚀 Starting AI CRM Backend...');
-    console.log('📊 Environment:', process.env.NODE_ENV || 'development');
-    console.log('📊 Initial Port:', port);
+    // Starting AI CRM Backend
     
     const app = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log'], // Enable logging for debugging
@@ -140,7 +135,6 @@ async function bootstrap() {
 
     // Railway health check backup - always return 200 OK
     app.use('/healthz', (req, res) => {
-      console.log('🔍 Railway health check (Express backup)');
       res.status(200).send('OK');
     });
 
@@ -156,21 +150,17 @@ async function bootstrap() {
         // Check if port is available before trying to use it
         const portAvailable = await isPortAvailable(currentPort);
         if (!portAvailable) {
-          console.log(`⚠️ Port ${currentPort} is not available, skipping...`);
           currentAttempt++;
           continue;
         }
         
-        console.log(`🔌 Attempting to start on port ${currentPort} (attempt ${currentAttempt + 1}/${maxPortAttempts})`);
-        
         await app.listen(currentPort, '0.0.0.0');
         port = currentPort;
         serverStarted = true;
-        console.log(`✅ AI CRM Backend successfully started on port ${port}`);
       } catch (error) {
         if (error.code === 'EADDRINUSE') {
           currentAttempt++;
-          console.log(`⚠️ Port ${portSequence[currentAttempt - 1] || (port + currentAttempt - 1)} is busy, trying next port...`);
+          // Port is busy, trying next port
           
           // Update health check server to new port
           const newPort = portSequence[currentAttempt] || (port + currentAttempt);
@@ -178,38 +168,29 @@ async function bootstrap() {
           const newHealthServer = createHealthCheckServer(newPort);
           Object.assign(healthServer, newHealthServer);
         } else {
-          console.error(`❌ Non-port error occurred:`, error.message);
           throw error; // Re-throw non-port related errors
         }
       }
     }
 
     if (!serverStarted) {
-      console.error(`❌ Failed to start server after ${maxPortAttempts} port attempts`);
-      console.log('⚠️ But health check server is still running for Railway');
-      console.log('⚠️ Railway can still reach /healthz endpoint');
+      // Failed to start server but health check server is still running
       
       // Keep the health check server running even if NestJS fails
       process.on('SIGTERM', () => {
-        console.log('🔄 SIGTERM received, shutting down health check server...');
         healthServer.close();
         process.exit(0);
       });
 
       process.on('SIGINT', () => {
-        console.log('🔄 SIGINT received, shutting down health check server...');
         healthServer.close();
         process.exit(0);
       });
 
-      // This ensures Railway can always reach /healthz
-      console.log('🔄 Health check server will continue running for Railway');
-      console.log('🔄 API endpoints are available with fallback responses');
-
       // Keep the process alive
       setInterval(() => {
-        console.log('💓 Health check server is still running...');
-      }, 30000); // Log every 30 seconds
+        // Health check server is still running
+      }, 30000);
       
       return; // Exit early but keep health check server running
     }
@@ -232,17 +213,10 @@ async function bootstrap() {
       process.exit(0);
     });
 
-    console.log(`🔗 Health check available at: http://0.0.0.0:${port}/health`);
-    console.log(`🔗 Railway health check at: http://0.0.0.0:${port}/healthz`);
-    console.log(`🔗 Status endpoint at: http://0.0.0.0:${port}/status`);
-    console.log(`🔗 Ping endpoint at: http://0.0.0.0:${port}/ping`);
-    console.log(`🔗 API endpoints at: http://0.0.0.0:${port}/api/files`);
+    // Server started successfully
 
   } catch (error) {
-    console.error('❌ Failed to start AI CRM Backend:', error);
-    console.log('⚠️ But health check server is still running for Railway');
-    console.log('⚠️ Database connection failed, but service is available for health checks');
-    console.log('⚠️ API endpoints are available but with limited functionality');
+    // Failed to start AI CRM Backend but health check server is still running
 
     // Keep the health check server running even if NestJS fails
     process.on('SIGTERM', () => {
@@ -265,21 +239,16 @@ async function bootstrap() {
 
 // Global error handler to prevent crashes
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  console.log('⚠️ But health check server is still running for Railway');
+  // Uncaught Exception - health check server is still running
   // Don't exit - keep the health check server running
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  console.log('⚠️ But health check server is still running for Railway');
+  // Unhandled Rejection - health check server is still running
   // Don't exit - keep the health check server running
 });
 
 bootstrap().catch(error => {
-  console.error('❌ Bootstrap failed:', error);
-  console.log('⚠️ But health check server is still running for Railway');
-  console.log('⚠️ Railway can still reach /healthz endpoint');
-  console.log('⚠️ API endpoints are available with fallback responses');
+  // Bootstrap failed - health check server is still running
   // Don't exit - let the health check server keep running
 });

@@ -5,7 +5,7 @@ let sharp: any;
 try {
   sharp = require('sharp');
 } catch (error) {
-  console.log('📋 Sharp not installed - image preprocessing disabled. Install with: npm install sharp');
+  // Sharp not installed - image preprocessing disabled
   sharp = null;
 }
 
@@ -38,7 +38,6 @@ export class ImagePreprocessingService {
     
     // Check if Sharp is available
     if (!sharp) {
-      console.log('⚠️ Sharp not installed - skipping image preprocessing');
       return {
         processedBuffer: imageBuffer, // Return original buffer
         originalSize: { width: 0, height: 0 },
@@ -48,7 +47,6 @@ export class ImagePreprocessingService {
       };
     }
     
-    console.log(`🎯 Preprocessing image: ${filename}`);
     const appliedOperations: string[] = [];
     
     // Get original image info
@@ -116,8 +114,7 @@ export class ImagePreprocessingService {
     // Calculate expected confidence boost based on applied operations
     const confidenceBoost = this.calculateConfidenceBoost(appliedOperations, originalSize);
     
-    console.log(`✅ Preprocessing complete: ${appliedOperations.join(', ')}`);
-    console.log(`📈 Expected OCR improvement: +${confidenceBoost}%`);
+    // Preprocessing complete
     
     return {
       processedBuffer,

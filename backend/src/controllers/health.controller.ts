@@ -88,7 +88,7 @@ export class HealthController {
         });
       }
     } catch (error) {
-      console.error('Status check error:', error);
+      // console.error('Status check error:', error);
       res.status(200).json({
         status: 'degraded',
         timestamp: new Date().toISOString(),

@@ -16,6 +16,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { FileProcessingService } from '../services/file-processing.service';
 import { GoogleVisionService } from '../services/google-vision.service';
+import { MedicalBillExtractionService } from '../services/medical-bill-extraction.service';
+import { MedicalBillService } from '../services/medical-bill.service';
 import { Request } from 'express';
 
 // Configure multer for file storage (using memory storage to preserve file.buffer)
@@ -50,8 +52,37 @@ const multerConfig = {
 export class FileUploadController {
   constructor(
     private readonly fileProcessingService: FileProcessingService,
-    private readonly googleVisionService: GoogleVisionService
+    private readonly googleVisionService: GoogleVisionService,
+    private readonly medicalBillExtractionService: MedicalBillExtractionService,
+    private readonly medicalBillService: MedicalBillService,
   ) {}
+
+  /**
+   * Clean up failed upload by removing the parsed file record
+   */
+  private async cleanupFailedUpload(parsedFileId: number): Promise<void> {
+    try {
+      await this.fileProcessingService.deleteParsedFile(parsedFileId);
+    } catch (error) {
+      // Failed to cleanup parsed file
+    }
+  }
+
+  /**
+   * Clean up orphaned records endpoint
+   */
+  @Post('cleanup')
+  async cleanupOrphanedRecords() {
+    try {
+      await this.fileProcessingService.cleanupOrphanedRecords();
+      return {
+        status: true,
+        message: "Orphaned records cleanup completed successfully"
+      };
+    } catch (error) {
+      throw new BadRequestException(`Cleanup failed: ${error.message}`);
+    }
+  }
 
   @Post('upload')
   @HttpCode(HttpStatus.OK)
@@ -61,17 +92,12 @@ export class FileUploadController {
     @Req() request: Request,
     @Headers('user-agent') userAgent?: string,
   ) {
-    // Upload request received
-
+    let result: any = null;
     
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-
-    // File received
-
-
     try {
+      if (!file) {
+        throw new BadRequestException('No file uploaded');
+      }
       // Extract request information
       const requestInfo = {
         userAgent: userAgent || request.headers['user-agent'],
@@ -82,35 +108,62 @@ export class FileUploadController {
   
 
       // Starting file processing
-  
-      const result = await this.fileProcessingService.processFile(file, requestInfo);
-
+      result = await this.fileProcessingService.processFile(file, requestInfo);
       
-      return {
-        success: true,
-        message: 'File processed successfully',
-        data: {
-          id: result.id,
-          filename: result.filename,
-          originalName: result.originalName,
-          fileType: result.fileType,
-          fileSize: result.fileSize,
-          mimeType: result.mimeType,
-          processingStatus: result.processingStatus,
-          processingDurationMs: result.processingDurationMs,
-          characterCount: result.characterCount,
-          wordCount: result.wordCount,
-          lineCount: result.lineCount,
-          hasStructuredData: result.hasStructuredData,
-          tableCount: result.tableCount,
-          averageConfidence: result.averageConfidence,
-          parsedContent: result.parsedContent ? JSON.parse(result.parsedContent) : null,
-          extractedText: result.extractedText,
-          createdAt: result.createdAt,
-          updatedAt: result.updatedAt,
+      // Check if this is a medical bill and extract structured data
+      if (result.extractedText && this.medicalBillExtractionService.isMedicalBill(result.extractedText)) {
+        try {
+          const medicalBillData = this.medicalBillExtractionService.extractMedicalBillData(result.extractedText);
+          const validation = this.medicalBillExtractionService.validateMedicalBill(medicalBillData);
+          
+          if (validation.isValid) {
+            // Calculate confidence score
+            const confidence = this.medicalBillExtractionService.calculateConfidence(medicalBillData);
+            
+            // Save medical bill data to database with file information
+            await this.medicalBillService.saveMedicalBill(result.id, medicalBillData, confidence, {
+              fileName: result.originalName,
+              fileSize: result.fileSize,
+              processedStatus: result.processingStatus
+            });
+            
+            // Return the medical bill data in the requested format with message and data
+            return {
+              status: true,
+              message: "Medical bill data extracted and saved successfully",
+              data: {
+                id: result.id,
+                fileName: result.originalName,
+                fileSize: result.fileSize,
+                processedStatus: result.processingStatus,
+                processedDate: new Date().toISOString(),
+                ...medicalBillData
+              }
+            };
+          } else {
+            // Clean up the parsed file record if medical bill validation fails
+            await this.cleanupFailedUpload(result.id);
+            throw new BadRequestException(`Medical bill validation failed: ${validation.errors.join(', ')}`);
+          }
+        } catch (error) {
+          // Clean up the parsed file record if medical bill extraction fails
+          if (result && result.id) {
+            await this.cleanupFailedUpload(result.id);
+          }
+          throw new BadRequestException(`Medical bill extraction failed: ${error.message}`);
         }
-      };
+      }
+
+      // If not a medical bill, clean up and return error
+      if (result && result.id) {
+        await this.cleanupFailedUpload(result.id);
+      }
+      throw new BadRequestException('Uploaded file does not appear to be a medical bill. Please upload a medical bill image.');
     } catch (error) {
+      // Clean up any partially created records
+      if (result && result.id) {
+        await this.cleanupFailedUpload(result.id);
+      }
       throw new BadRequestException(`File processing failed: ${error.message}`);
     }
   }
@@ -121,8 +174,56 @@ export class FileUploadController {
       const files = await this.fileProcessingService.getAllParsedFiles();
       
       return {
-        success: true,
-        data: files.map(file => {
+        status: true,
+        message: "Files retrieved successfully",
+        data: await Promise.all(files.map(async (file) => {
+          // Check if medical bill data exists in database
+          const medicalBill = await this.medicalBillService.getMedicalBillByParsedFileId(file.id);
+          if (medicalBill) {
+            // Return the saved medical bill data directly
+            return this.medicalBillService.convertToDto(medicalBill);
+          }
+          
+          // If not in database, check if this is a medical bill and extract structured data
+          if (file.extractedText && this.medicalBillExtractionService.isMedicalBill(file.extractedText)) {
+            try {
+              const medicalBillData = this.medicalBillExtractionService.extractMedicalBillData(file.extractedText);
+              const validation = this.medicalBillExtractionService.validateMedicalBill(medicalBillData);
+              
+              if (validation.isValid) {
+                // Calculate confidence and save to database
+                const confidence = this.medicalBillExtractionService.calculateConfidence(medicalBillData);
+                await this.medicalBillService.saveMedicalBill(file.id, medicalBillData, confidence, {
+                  fileName: file.originalName,
+                  fileSize: file.fileSize,
+                  processedStatus: file.processingStatus
+                });
+                
+                // Return the medical bill data directly with ID
+                return {
+                  id: file.id,
+                  fileName: file.originalName,
+                  fileSize: file.fileSize,
+                  processedStatus: file.processingStatus,
+                  processedDate: new Date().toISOString(),
+                  ...medicalBillData
+                };
+              } else {
+                // If validation fails, still return the extracted data with ID for debugging
+                return {
+                  id: file.id,
+                  fileName: file.originalName,
+                  fileSize: file.fileSize,
+                  processedStatus: file.processingStatus,
+                  processedDate: new Date().toISOString(),
+                  ...medicalBillData
+                };
+              }
+            } catch (error) {
+              // If medical bill extraction fails, continue with normal processing
+            }
+          }
+          
           const structuredTableData = file.structuredTableData ? JSON.parse(file.structuredTableData) : null;
           return {
             id: file.id,
@@ -146,7 +247,7 @@ export class FileUploadController {
             createdAt: file.createdAt,
             updatedAt: file.updatedAt,
           };
-        })
+        }))
       };
     } catch (error) {
       throw new BadRequestException(`Failed to retrieve files: ${error.message}`);
@@ -158,10 +259,71 @@ export class FileUploadController {
     try {
       const file = await this.fileProcessingService.getParsedFileById(id);
       
+      // Check if medical bill data exists in database
+      const medicalBill = await this.medicalBillService.getMedicalBillByParsedFileId(id);
+      if (medicalBill) {
+        // Return the saved medical bill data in the requested format with message and data
+        const medicalBillData = this.medicalBillService.convertToDto(medicalBill);
+        return {
+          status: true,
+          message: "Medical bill data retrieved successfully",
+          data: medicalBillData
+        };
+      }
+      
+      // If not in database, check if this is a medical bill and extract structured data
+      if (file.extractedText && this.medicalBillExtractionService.isMedicalBill(file.extractedText)) {
+        try {
+          const medicalBillData = this.medicalBillExtractionService.extractMedicalBillData(file.extractedText);
+          const validation = this.medicalBillExtractionService.validateMedicalBill(medicalBillData);
+          
+          if (validation.isValid) {
+            // Calculate confidence and save to database
+            const confidence = this.medicalBillExtractionService.calculateConfidence(medicalBillData);
+            await this.medicalBillService.saveMedicalBill(id, medicalBillData, confidence, {
+              fileName: file.originalName,
+              fileSize: file.fileSize,
+              processedStatus: file.processingStatus
+            });
+            
+            // Return the medical bill data in the requested format with message and data
+            return {
+              status: true,
+              message: "Medical bill data extracted and saved successfully",
+              data: {
+                id: id,
+                fileName: file.originalName,
+                fileSize: file.fileSize,
+                processedStatus: file.processingStatus,
+                processedDate: new Date().toISOString(),
+                ...medicalBillData
+              }
+            };
+          } else {
+            // If validation fails, still return the extracted data with ID for debugging
+            return {
+              status: true,
+              message: "Medical bill data extracted but validation failed",
+              data: {
+                id: id,
+                fileName: file.originalName,
+                fileSize: file.fileSize,
+                processedStatus: file.processingStatus,
+                processedDate: new Date().toISOString(),
+                ...medicalBillData
+              }
+            };
+          }
+        } catch (error) {
+          // If medical bill extraction fails, continue with normal processing
+        }
+      }
+      
       const structuredTableData = file.structuredTableData ? JSON.parse(file.structuredTableData) : null;
       
       return {
-        success: true,
+        status: true,
+        message: "File data retrieved successfully",
         data: {
           id: file.id,
           filename: file.filename,
@@ -226,8 +388,8 @@ export class FileUploadController {
 
       // Starting advanced invoice OCR processing
       
-      // Use specialized invoice extraction method
-      const extractionResult = await this.fileProcessingService.extractInvoiceData(file, requestInfo);
+      // Use standard file processing method
+      const extractionResult = await this.fileProcessingService.processFile(file, requestInfo);
       
       // Invoice extraction completed
       
@@ -249,7 +411,7 @@ export class FileUploadController {
           filename: extractionResult.filename,
           originalName: extractionResult.originalName,
           fileSize: extractionResult.fileSize,
-          ocrEngine: extractionResult.ocrEngine || 'tesseract',
+          ocrEngine: 'tesseract', // Default OCR engine
           confidence: extractionResult.averageConfidence,
           tableCount: extractionResult.tableCount,
           hasStructuredData: extractionResult.hasStructuredData,
@@ -264,8 +426,8 @@ export class FileUploadController {
         // Raw extracted text for debugging
         extractedText: extractionResult.extractedText,
         
-        // Bounding box information (if available)
-        boundingBoxes: extractionResult.boundingBoxes || null
+        // Bounding box information (not available in ParsedFile)
+        boundingBoxes: null
       };
 
     } catch (error) {

@@ -6,7 +6,7 @@ try {
   const vision = require('@google-cloud/vision');
   ImageAnnotatorClient = vision.ImageAnnotatorClient;
 } catch (error) {
-  console.log('📋 Google Vision API not installed - using Tesseract OCR only');
+  // console.log('📋 Google Vision API not installed - using Tesseract OCR only');
   ImageAnnotatorClient = null;
 }
 
@@ -25,14 +25,14 @@ export class GoogleVisionService {
         if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
           // Service Account Key File method (recommended)
           clientConfig.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-          console.log('🔑 Using service account credentials');
+          // console.log('🔑 Using service account credentials');
         } else if (process.env.GOOGLE_API_KEY) {
           // API Key method
           clientConfig.apiKey = process.env.GOOGLE_API_KEY;
-          console.log('🔑 Using API key credentials');
+          // console.log('🔑 Using API key credentials');
         } else {
           // Default credentials (for Google Cloud environments)
-          console.log('🔑 Using default credentials (ADC)');
+          // console.log('🔑 Using default credentials (ADC)');
         }
         
         if (process.env.GOOGLE_PROJECT_ID) {
@@ -41,19 +41,19 @@ export class GoogleVisionService {
 
         this.client = new ImageAnnotatorClient(clientConfig);
         this.isAvailable = true;
-        console.log('✅ Google Vision API initialized successfully');
+        // console.log('✅ Google Vision API initialized successfully');
         
         // Test the connection
         this.testConnection();
         
       } catch (error) {
-        console.error('⚠️ Google Vision API initialization failed:', error.message);
-        console.log('💡 Setup guide: See GOOGLE_VISION_SETUP.md');
+        // console.error('⚠️ Google Vision API initialization failed:', error.message);
+        // console.log('💡 Setup guide: See GOOGLE_VISION_SETUP.md');
         this.isAvailable = false;
       }
     } else {
-      console.log('📋 Google Vision API not installed');
-      console.log('💡 Install with: npm install @google-cloud/vision');
+      // console.log('📋 Google Vision API not installed');
+      // console.log('💡 Install with: npm install @google-cloud/vision');
       this.isAvailable = false;
     }
   }
@@ -74,9 +74,9 @@ export class GoogleVisionService {
         image: { content: testImageBuffer.toString('base64') }
       });
       
-      console.log('✅ Google Vision API connection test successful');
+      // console.log('✅ Google Vision API connection test successful');
     } catch (error) {
-      console.warn('⚠️ Google Vision API connection test failed:', error.message);
+      // console.warn('⚠️ Google Vision API connection test failed:', error.message);
       // Don't disable the service, just warn
     }
   }
@@ -96,7 +96,7 @@ export class GoogleVisionService {
     }
 
     try {
-      console.log('🔍 Processing image with Google Vision API...');
+      // console.log('🔍 Processing image with Google Vision API...');
       
       // Detect text with Google Vision API
       const [textDetection] = await this.client.textDetection({
@@ -126,7 +126,7 @@ export class GoogleVisionService {
         y: this.getAverageY(detection.boundingPoly?.vertices || []),
       }));
 
-      console.log(`✅ Google Vision detected ${textBlocks.length} text blocks`);
+      // console.log(`✅ Google Vision detected ${textBlocks.length} text blocks`);
 
       // Advanced table reconstruction using bounding boxes
       const tableData = this.reconstructTableFromBlocks(textBlocks);
@@ -141,13 +141,13 @@ export class GoogleVisionService {
       };
 
     } catch (error) {
-      console.error('❌ Google Vision API error:', error);
+      // console.error('❌ Google Vision API error:', error);
       throw new Error(`Google Vision processing failed: ${error.message}`);
     }
   }
 
   private reconstructTableFromBlocks(textBlocks: any[]): any[] {
-    console.log('📊 Reconstructing table structure from text blocks...');
+    // console.log('📊 Reconstructing table structure from text blocks...');
     
     // Sort blocks by Y position (rows) then X position (columns)
     const sortedBlocks = textBlocks.sort((a, b) => {
@@ -183,7 +183,7 @@ export class GoogleVisionService {
       rows.push(currentRow);
     }
 
-    console.log(`📋 Detected ${rows.length} table rows`);
+    // console.log(`📋 Detected ${rows.length} table rows`);
 
     // Convert to structured data
     const structuredData = rows.map((row, rowIndex) => {
@@ -261,7 +261,7 @@ export class GoogleVisionService {
       };
 
     } catch (error) {
-      console.error('❌ Document AI error:', error);
+      // console.error('❌ Document AI error:', error);
       return { tables: [], text: '', confidence: 0 };
     }
   }
@@ -316,7 +316,7 @@ export class GoogleVisionService {
     }
 
     try {
-      console.log('🔍 Processing invoice with Google Vision API...');
+      // console.log('🔍 Processing invoice with Google Vision API...');
       
       // Use both text detection and document text detection for best results
       const [textResult, documentResult] = await Promise.all([
@@ -331,7 +331,7 @@ export class GoogleVisionService {
       const textDetections = textResult[0]?.textAnnotations || [];
       const fullText = textDetections[0]?.description || '';
       
-      console.log(`📄 Extracted ${fullText.length} characters of text`);
+      // console.log(`📄 Extracted ${fullText.length} characters of text`);
       
       if (textDetections.length === 0) {
         return {
@@ -358,7 +358,7 @@ export class GoogleVisionService {
         y: this.getAverageY(detection.boundingPoly?.vertices || [])
       }));
 
-      console.log(`📊 Processing ${textBlocks.length} text blocks for invoice structure`);
+      // console.log(`📊 Processing ${textBlocks.length} text blocks for invoice structure`);
 
       // Apply invoice-specific processing using Google Vision data
       const invoiceData = this.extractInvoiceStructureFromBlocks(textBlocks, fullText);
@@ -383,7 +383,7 @@ export class GoogleVisionService {
       };
 
     } catch (error) {
-      console.error('❌ Google Vision invoice processing error:', error);
+      // console.error('❌ Google Vision invoice processing error:', error);
       throw new Error(`Google Vision processing failed: ${error.message}`);
     }
   }
@@ -393,7 +393,7 @@ export class GoogleVisionService {
    * Uses spatial positioning for better accuracy than line-by-line parsing
    */
   private extractInvoiceStructureFromBlocks(textBlocks: any[], fullText: string): any[] {
-    console.log('🧾 Extracting invoice structure from spatial text blocks...');
+    // console.log('🧾 Extracting invoice structure from spatial text blocks...');
     
     // Sort by Y position (top to bottom), then X position (left to right)
     const sortedBlocks = textBlocks
@@ -408,11 +408,11 @@ export class GoogleVisionService {
 
     // Group into rows based on Y position
     const rows = this.groupBlocksIntoRows(sortedBlocks);
-    console.log(`📋 Grouped into ${rows.length} potential rows`);
+    // console.log(`📋 Grouped into ${rows.length} potential rows`);
 
     // Filter and identify data rows (not headers/footers)
     const dataRows = rows.filter((row, index) => this.isLikelyInvoiceDataRow(row, index, rows));
-    console.log(`📊 Identified ${dataRows.length} data rows`);
+    // console.log(`📊 Identified ${dataRows.length} data rows`);
 
     // Convert rows to invoice format
     const invoiceItems: any[] = [];
@@ -424,7 +424,7 @@ export class GoogleVisionService {
       }
     }
 
-    console.log(`✅ Successfully extracted ${invoiceItems.length} invoice items`);
+    // console.log(`✅ Successfully extracted ${invoiceItems.length} invoice items`);
     return invoiceItems;
   }
 

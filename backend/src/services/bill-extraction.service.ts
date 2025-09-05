@@ -14,12 +14,12 @@ export class BillExtractionService {
   ) {}
 
   async extractAndStoreBillData(parsedFile: ParsedFile): Promise<BillData> {
-    console.log(`🔍 Extracting bill data from file: ${parsedFile.originalName}`);
+    // console.log(`🔍 Extracting bill data from file: ${parsedFile.originalName}`);
 
     try {
       // Determine bill type based on content
       const billType = this.detectBillType(parsedFile);
-      console.log(`📋 Detected bill type: ${billType}`);
+      // console.log(`📋 Detected bill type: ${billType}`);
 
       // Extract structured data
       let extractedData: any = {};
@@ -27,7 +27,7 @@ export class BillExtractionService {
         try {
           extractedData = JSON.parse(parsedFile.parsedContent);
         } catch (e) {
-          console.warn('Failed to parse parsedContent JSON:', e.message);
+          // console.warn('Failed to parse parsedContent JSON:', e.message);
         }
       }
 
@@ -51,11 +51,11 @@ export class BillExtractionService {
 
       // Save to database
       const savedBillData = await this.billDataRepository.save(billData);
-      console.log(`✅ Bill data extracted and saved with ID: ${savedBillData.id}`);
+      // console.log(`✅ Bill data extracted and saved with ID: ${savedBillData.id}`);
 
       return savedBillData;
     } catch (error) {
-      console.error('❌ Error extracting bill data:', error);
+      // console.error('❌ Error extracting bill data:', error);
       throw new Error(`Bill data extraction failed: ${error.message}`);
     }
   }
@@ -141,7 +141,7 @@ export class BillExtractionService {
   }
 
   private async extractPayslipData(billData: BillData, extractedData: any, rawText: string): Promise<void> {
-    console.log('💰 Extracting payslip data...');
+    // console.log('💰 Extracting payslip data...');
 
     // Extract employee details
     if (extractedData.tables) {
@@ -206,7 +206,7 @@ export class BillExtractionService {
   }
 
   private async extractInvoiceData(billData: BillData, extractedData: any, rawText: string): Promise<void> {
-    console.log('📄 Extracting invoice data...');
+    // console.log('📄 Extracting invoice data...');
 
     // Extract vendor information
     if (extractedData.tables) {
@@ -259,7 +259,7 @@ export class BillExtractionService {
   }
 
   private async extractGenericBillData(billData: BillData, extractedData: any, rawText: string): Promise<void> {
-    console.log('📋 Extracting generic bill data...');
+    // console.log('📋 Extracting generic bill data...');
 
     // Try to extract any structured data available
     if (extractedData.tables && extractedData.tables.length > 0) {

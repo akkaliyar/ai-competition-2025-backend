@@ -4,16 +4,20 @@ import { ConfigModule } from '@nestjs/config';
 import { FileUploadController } from './controllers/file-upload.controller';
 import { HealthController } from './controllers/health.controller';
 import { BillDataController } from './controllers/bill-data.controller';
+import { MedicalBillController } from './controllers/medical-bill.controller';
 import { FileProcessingService } from './services/file-processing.service';
 import { DatabaseSetupService } from './services/database-setup.service';
 import { GoogleVisionService } from './services/google-vision.service';
 import { ImagePreprocessingService } from './services/image-preprocessing.service';
 import { BillExtractionService } from './services/bill-extraction.service';
+import { MedicalBillExtractionService } from './services/medical-bill-extraction.service';
+import { MedicalBillService } from './services/medical-bill.service';
 import { ParsedFile } from './entities/parsed-file.entity';
 import { OcrResult } from './entities/ocr-result.entity';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { TableExtraction } from './entities/table-extraction.entity';
 import { BillData } from './entities/bill-data.entity';
+import { MedicalBill } from './entities/medical-bill.entity';
 import { DataSource } from 'typeorm';
 
 @Module({
@@ -28,7 +32,7 @@ import { DataSource } from 'typeorm';
         // Base configuration with only valid MySQL2 options
         const config = {
           type: 'mysql' as const,
-          entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData],
+          entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData, MedicalBill],
           synchronize: true, // Enable table creation
           logging: true, // Enable logging to see what's happening
           charset: 'utf8mb4',
@@ -103,10 +107,10 @@ import { DataSource } from 'typeorm';
         };
       },
     }),
-    TypeOrmModule.forFeature([ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData]),
+    TypeOrmModule.forFeature([ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData, MedicalBill]),
   ],
-  controllers: [FileUploadController, HealthController, BillDataController],
-  providers: [FileProcessingService, DatabaseSetupService, GoogleVisionService, ImagePreprocessingService, BillExtractionService],
+  controllers: [FileUploadController, HealthController, BillDataController, MedicalBillController],
+  providers: [FileProcessingService, DatabaseSetupService, GoogleVisionService, ImagePreprocessingService, BillExtractionService, MedicalBillExtractionService, MedicalBillService],
 })
 export class AppModule implements OnModuleInit {
   constructor(private dataSource: DataSource) {}
