@@ -78,8 +78,10 @@ export class MedicalBillExtractionService {
   private extractRawValues(ocrText: string, lines: string[], billData: MedicalBillDto): void {
     // Use the cleaned OCR text for better accuracy
     const cleanedOcrText = this.preprocessOcrText(ocrText);
-    // Extract invoice number - look for "Invoice No" and take the next text
+    // Extract invoice number - look for "Invoice No" or "Invoice:" and take the next text
     const invoiceIndex = cleanedOcrText.toLowerCase().indexOf('invoice no');
+    const invoiceColonIndex = cleanedOcrText.toLowerCase().indexOf('invoice:');
+    
     if (invoiceIndex !== -1) {
       const afterInvoice = cleanedOcrText.substring(invoiceIndex + 10).trim();
       const words = afterInvoice.split(/\s+/);
@@ -87,6 +89,34 @@ export class MedicalBillExtractionService {
         // Skip dots and colons, take the first meaningful word
         for (const word of words) {
           if (word && word !== '.' && word !== ':' && word.length > 1) {
+            billData.invoiceNo = word;
+            break;
+          }
+        }
+      }
+    } else if (invoiceColonIndex !== -1) {
+      const afterInvoice = cleanedOcrText.substring(invoiceColonIndex + 8).trim();
+      const words = afterInvoice.split(/\s+/);
+      if (words.length > 0) {
+        // Take the first meaningful word after "Invoice:"
+        for (const word of words) {
+          if (word && word.length > 1) {
+            billData.invoiceNo = word;
+            break;
+          }
+        }
+      }
+    }
+    
+    // Also try to find invoice number in the format "Invoice No.: R006183"
+    const invoiceNoDotIndex = cleanedOcrText.toLowerCase().indexOf('invoice no.:');
+    if (invoiceNoDotIndex !== -1) {
+      const afterInvoice = cleanedOcrText.substring(invoiceNoDotIndex + 12).trim();
+      const words = afterInvoice.split(/\s+/);
+      if (words.length > 0) {
+        // Take the first meaningful word after "Invoice No.:"
+        for (const word of words) {
+          if (word && word.length > 1) {
             billData.invoiceNo = word;
             break;
           }
@@ -114,34 +144,23 @@ export class MedicalBillExtractionService {
     for (const line of lines) {
       if (line.toLowerCase().includes('medicose') || 
           line.toLowerCase().includes('medical') || 
-          line.toLowerCase().includes('pharmacy')) {
-        // Take only the shop name part, not the entire line
-        const words = line.split(/\s+/);
-        const shopWords = [];
-        for (const word of words) {
-          if (word.toLowerCase().includes('medicose') || 
-              word.toLowerCase().includes('medical') || 
-              word.toLowerCase().includes('pharmacy')) {
-            shopWords.push(word);
-            break;
-          }
-          shopWords.push(word);
-        }
-        
-        let shopName = shopWords.join(' ');
-        
-        // Clean up common OCR errors in shop names
+          line.toLowerCase().includes('pharmacy') ||
+          line.toLowerCase().includes('stores')) {
+        // Clean up the shop name
+        let shopName = line.trim();
         shopName = shopName.replace(/terms.*condjrion.*for/gi, '');
         shopName = shopName.replace(/gst.*invoice/gi, '');
         shopName = shopName.replace(/\s+/g, ' ').trim();
         
-        billData.shopName = shopName;
-        break;
+        if (shopName && shopName.length > 5) {
+          billData.shopName = shopName;
+          break;
+        }
       }
     }
 
     // Extract shop address - look for address keywords
-    const addressKeywords = ['shop', 'floor', 'bazar', 'mart', 'noida', 'west', 'ground', 'eco', 'suptech', 'greater'];
+    const addressKeywords = ['shop', 'floor', 'bazar', 'mart', 'noida', 'west', 'ground', 'eco', 'suptech', 'greater', 'd. no', 'nursing home', 'tel. exchange', 'chandanagar', 'hyd'];
     for (const line of lines) {
       if (addressKeywords.some(keyword => line.toLowerCase().includes(keyword)) && line.length > 20) {
         billData.shopAddress = line;
@@ -155,8 +174,10 @@ export class MedicalBillExtractionService {
       billData.phone = [...new Set(phoneMatches)];
     }
 
-    // Extract patient name - look for "Patient Name" and take the next text
+    // Extract patient name - look for "Patient Name" or "Name:" and take the next text
     const patientIndex = cleanedOcrText.toLowerCase().indexOf('patient name');
+    const nameIndex = cleanedOcrText.toLowerCase().indexOf('name:');
+    
     if (patientIndex !== -1) {
       const afterPatient = cleanedOcrText.substring(patientIndex + 12).trim();
       const words = afterPatient.split(/\s+/);
@@ -173,6 +194,20 @@ export class MedicalBillExtractionService {
               nameWords.push(cleanWord);
               if (nameWords.length >= 2) break; // Take first 2 words
             }
+          }
+        }
+        billData.patientName = nameWords.join(' ');
+      }
+    } else if (nameIndex !== -1) {
+      const afterName = cleanedOcrText.substring(nameIndex + 5).trim();
+      const words = afterName.split(/\s+/);
+      if (words.length > 0) {
+        // Take the first few words that look like a name
+        const nameWords = [];
+        for (const word of words) {
+          if (word && word.length > 1) {
+            nameWords.push(word);
+            if (nameWords.length >= 3) break; // Take up to 3 words for names like "Mrs. K. JAYANTHI"
           }
         }
         billData.patientName = nameWords.join(' ');
@@ -201,10 +236,25 @@ export class MedicalBillExtractionService {
       billData.phone = allPhoneMatches;
     }
 
-    // Extract doctor details - look for "Dr" or "Doctor"
-    const doctorIndex = ocrText.toLowerCase().indexOf('dr');
-    if (doctorIndex !== -1) {
-      const afterDr = ocrText.substring(doctorIndex + 2).trim();
+    // Extract doctor details - look for "Dr", "Doctor", or "Doctor Name:"
+    const doctorIndex = cleanedOcrText.toLowerCase().indexOf('dr');
+    const doctorNameIndex = cleanedOcrText.toLowerCase().indexOf('doctor name');
+    
+    if (doctorNameIndex !== -1) {
+      const afterDoctorName = cleanedOcrText.substring(doctorNameIndex + 11).trim();
+      const words = afterDoctorName.split(/\s+/);
+      if (words.length > 0) {
+        // Take the first meaningful word after "Doctor Name:"
+        for (const word of words) {
+          if (word && word !== ':' && word.length > 1) {
+            billData.doctorName = word;
+            billData.prescribedBy = 'Dr. ' + word;
+            break;
+          }
+        }
+      }
+    } else if (doctorIndex !== -1) {
+      const afterDr = cleanedOcrText.substring(doctorIndex + 2).trim();
       const words = afterDr.split(/\s+/);
       if (words.length > 0) {
         // Skip dots, take the first meaningful word
@@ -335,64 +385,93 @@ export class MedicalBillExtractionService {
         return isNaN(parsed) ? 0 : parsed;
       };
 
-      // For the format: "1 PARACIP-650MG TAB 1*10 22.84 405 10/27 1 22.84 22.84"
-      // Parts: [0: sNo, 1-2: description, 3: pack, 4: mrp, 5: batchNo, 6: exp, 7: qty, 8: rate, 9: amount]
+      // Handle both bill formats:
+      // PREM SAI format: "1 PARACIP 650MG TAB 1*10 22.84 405 10/27 10 22.84 22.84"
+      // VIJAYA format: "1 ULTRACET - TAB N1657 10/2024 30 22.15 664.50"
       
-      // Find where the numeric values start (MRP, Batch, Exp, Qty, Rate, Amount)
-      let descriptionEndIndex = 1;
+      let itemDescription = '';
+      let pack = '';
+      let mrp = 0;
+      let batchNo = '';
+      let exp = '';
+      let qty = 0;
+      let rate = 0;
+      let amount = 0;
+      
+      // Method 1: Look for pack pattern (1*10, 1X200ML) - PREM SAI format
       let packIndex = -1;
-      let mrpIndex = -1;
-      
-      // Look for the pack pattern (like "1*10", "1X200ML", "1X10")
-      for (let i = 1; i < parts.length - 2; i++) {
+      for (let i = 1; i < parts.length; i++) {
         if (parts[i].match(/^\d+[\*X]\d+/)) {
           packIndex = i;
-          descriptionEndIndex = i;
           break;
         }
       }
       
-      // If no pack pattern found, try to find the first numeric value (MRP)
-      if (packIndex === -1) {
-        for (let i = 1; i < parts.length - 2; i++) {
-          if (parts[i].match(/^\d+\.?\d*$/)) {
-            mrpIndex = i;
-            descriptionEndIndex = i;
+      if (packIndex !== -1) {
+        // PREM SAI format: Description Pack MRP Batch Exp Qty Rate Amount
+        itemDescription = parts.slice(1, packIndex).join(' ');
+        pack = parts[packIndex];
+        
+        if (packIndex + 1 < parts.length) mrp = safeParseFloat(parts[packIndex + 1]);
+        if (packIndex + 2 < parts.length) batchNo = parts[packIndex + 2];
+        if (packIndex + 3 < parts.length) exp = parts[packIndex + 3];
+        if (packIndex + 4 < parts.length) qty = safeParseInt(parts[packIndex + 4]);
+        if (packIndex + 5 < parts.length) rate = safeParseFloat(parts[packIndex + 5]);
+        if (packIndex + 6 < parts.length) amount = safeParseFloat(parts[packIndex + 6]);
+      } else {
+        // VIJAYA format: Description Batch Exp Qty Rate Amount
+        // Look for batch pattern (alphanumeric like N1657, GT8311B, DPM2023, NFT220238, AST212854)
+        // Batch numbers typically contain numbers and are not common medicine words or units
+        let batchIndex = -1;
+        for (let i = 1; i < parts.length; i++) {
+          const part = parts[i];
+          // Batch pattern: contains numbers, is not a common medicine word, and not a unit
+          if (part.match(/^[A-Z0-9]{3,}$/) && 
+              part.match(/\d/) && 
+              !['TAB', 'CAP', 'SYR', 'MG', 'ML', 'FORTE', 'ULTRACET', 'TRENAXA', 'LUBRICA', 'TRANZYME', 'FEBUHEAL', '500MG', '40mg'].includes(part) &&
+              !part.match(/\d+MG$/i) && !part.match(/\d+ML$/i)) {
+            batchIndex = i;
             break;
           }
         }
+        
+        if (batchIndex !== -1) {
+          itemDescription = parts.slice(1, batchIndex).join(' ');
+          batchNo = parts[batchIndex];
+          
+          if (batchIndex + 1 < parts.length) exp = parts[batchIndex + 1];
+          if (batchIndex + 2 < parts.length) qty = safeParseInt(parts[batchIndex + 2]);
+          if (batchIndex + 3 < parts.length) rate = safeParseFloat(parts[batchIndex + 3]);
+          if (batchIndex + 4 < parts.length) amount = safeParseFloat(parts[batchIndex + 4]);
+          
+          // For VIJAYA format, MRP is same as rate
+          mrp = rate;
+        } else {
+          // Fallback: try to extract numeric values from the end
+          const numericValues = [];
+          for (let i = parts.length - 1; i >= 1; i--) {
+            if (parts[i].match(/^\d+\.?\d*$/)) {
+              numericValues.unshift(safeParseFloat(parts[i]));
+              if (numericValues.length >= 3) break;
+            }
+          }
+          
+          if (numericValues.length >= 3) {
+            itemDescription = parts.slice(1, parts.length - numericValues.length).join(' ');
+            qty = numericValues[0] || 0;
+            rate = numericValues[1] || 0;
+            amount = numericValues[2] || 0;
+            mrp = rate; // Assume MRP equals rate if not specified
+          } else {
+            itemDescription = parts.slice(1).join(' ');
+          }
+        }
       }
-      
-      // Extract description (everything between sNo and pack/mrp)
-      const itemDescription = parts.slice(1, descriptionEndIndex).join(' ').trim();
       
       // Skip if description is too short or contains only special characters
       if (itemDescription.length < 3 || /^[^a-zA-Z0-9]*$/.test(itemDescription)) {
         return null;
       }
-      
-      // Extract pack
-      const pack = packIndex !== -1 ? parts[packIndex] : '';
-      
-      // Find MRP (first decimal number after description)
-      let actualMrpIndex = packIndex !== -1 ? packIndex + 1 : mrpIndex;
-      if (actualMrpIndex === -1) {
-        // Fallback: look for first decimal number
-        for (let i = descriptionEndIndex; i < parts.length - 1; i++) {
-          if (parts[i].match(/^\d+\.\d+$/)) {
-            actualMrpIndex = i;
-            break;
-          }
-        }
-      }
-      
-      // Extract remaining fields based on the pattern - be more flexible with field count
-      const mrp = actualMrpIndex !== -1 ? safeParseFloat(parts[actualMrpIndex]) : 0;
-      const batchNo = actualMrpIndex !== -1 && actualMrpIndex + 1 < parts.length ? parts[actualMrpIndex + 1] : '';
-      const exp = actualMrpIndex !== -1 && actualMrpIndex + 2 < parts.length ? parts[actualMrpIndex + 2] : '';
-      const qty = actualMrpIndex !== -1 && actualMrpIndex + 3 < parts.length ? safeParseInt(parts[actualMrpIndex + 3]) : 0;
-      const rate = actualMrpIndex !== -1 && actualMrpIndex + 4 < parts.length ? safeParseFloat(parts[actualMrpIndex + 4]) : 0;
-      const amount = actualMrpIndex !== -1 && actualMrpIndex + 5 < parts.length ? safeParseFloat(parts[actualMrpIndex + 5]) : 0;
 
       return {
         sNo: sNo,
@@ -432,10 +511,18 @@ export class MedicalBillExtractionService {
       }
     }
 
-    // Extract total quantity
+    // Extract total quantity - handle both formats
     const totalQtyIndex = ocrText.toLowerCase().indexOf('totalqty');
+    const totalQtySpaceIndex = ocrText.toLowerCase().indexOf('total qty');
+    
     if (totalQtyIndex !== -1) {
       const afterTotalQty = ocrText.substring(totalQtyIndex + 8).trim();
+      const numberMatch = afterTotalQty.match(/\d+/);
+      if (numberMatch) {
+        billData.totalQty = safeParseInt(numberMatch[0]);
+      }
+    } else if (totalQtySpaceIndex !== -1) {
+      const afterTotalQty = ocrText.substring(totalQtySpaceIndex + 9).trim();
       const numberMatch = afterTotalQty.match(/\d+/);
       if (numberMatch) {
         billData.totalQty = safeParseInt(numberMatch[0]);
@@ -472,13 +559,40 @@ export class MedicalBillExtractionService {
       }
     }
 
-    // Extract grand total
+    // Extract grand total - handle both formats
     const grandTotalIndex = ocrText.toLowerCase().indexOf('grand total');
+    const netAmtIndex = ocrText.toLowerCase().indexOf('net amt');
+    
     if (grandTotalIndex !== -1) {
       const afterGrandTotal = ocrText.substring(grandTotalIndex + 11).trim();
       const numberMatch = afterGrandTotal.match(/[\d.]+/);
       if (numberMatch) {
         billData.grandTotal = safeParseFloat(numberMatch[0]);
+      }
+    } else if (netAmtIndex !== -1) {
+      const afterNetAmt = ocrText.substring(netAmtIndex + 7).trim();
+      const numberMatch = afterNetAmt.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.grandTotal = safeParseFloat(numberMatch[0]);
+      }
+    }
+    
+    // For VIJAYA format, also look for "Gross" and "Round" separately
+    const grossIndex = ocrText.toLowerCase().indexOf('gross:');
+    if (grossIndex !== -1) {
+      const afterGross = ocrText.substring(grossIndex + 6).trim();
+      const numberMatch = afterGross.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.subTotal = safeParseFloat(numberMatch[0]);
+      }
+    }
+    
+    const roundIndex = ocrText.toLowerCase().indexOf('round:');
+    if (roundIndex !== -1) {
+      const afterRound = ocrText.substring(roundIndex + 6).trim();
+      const numberMatch = afterRound.match(/[\d.]+/);
+      if (numberMatch) {
+        billData.roundOff = safeParseFloat(numberMatch[0]);
       }
     }
   }
@@ -729,7 +843,10 @@ export class MedicalBillExtractionService {
       'prescribed', 'doctor', 'shop', 'address', 'phone', 'amount in words',
       'goi', 'ones', 'i i', 'round', 'off', '112', 'authorised', 'signatory',
       'signature', 'thank', 'visit', 'again', 'welcome', 'customer', 'service',
-      'prem', 'sai', 'medicose', 'ground', 'floor', 'eco', 'bazar', 'suptech', 'mart', 'greater', 'noida', 'west'
+      'prem', 'sai', 'medicose', 'ground', 'floor', 'eco', 'bazar', 'suptech', 'mart', 'greater', 'noida', 'west',
+      'vijaya', 'pharmacy', 'general', 'stores', 'nursing', 'home', 'tel', 'exchange', 'chandanagar', 'hyd',
+      'goods', 'once', 'sold', 'will', 'taken', 'back', 'only', 'exchanged', 'before', 'week', 'bill', 'mandatory',
+      'damaged', 'fridge', 'items', 'not', 'exchanged', 'message', 'get', 'well', 'soon'
     ];
     
     const hasInvalidKeyword = invalidKeywords.some(keyword => 
@@ -744,14 +861,19 @@ export class MedicalBillExtractionService {
     const medicineKeywords = [
       'tab', 'tablet', 'cap', 'capsule', 'syrup', 'syr', 'injection', 'inj',
       'mg', 'ml', 'g', 'gm', 'paracip', 'lactolook', 'diopil', 'forte',
-      'medicine', 'drug', 'pharma', 'med', 'lactolook'
+      'ultracet', 'febuheal', 'trenaxa', 'lubrica', 'tranzyme',
+      'medicine', 'drug', 'pharma', 'med'
     ];
+    
+    // For items that have numeric values (qty, rate, amount), be more lenient
+    const hasNumericValues = item.qty > 0 || item.rate > 0 || item.amount > 0;
     
     const hasMedicineKeyword = medicineKeywords.some(keyword => 
       lowerDesc.includes(keyword)
     );
     
-    return hasMedicineKeyword;
+    // Accept items that either have medicine keywords OR have meaningful numeric values
+    return hasMedicineKeyword || hasNumericValues;
   }
 
   /**
@@ -760,10 +882,16 @@ export class MedicalBillExtractionService {
   private looksLikeMedicineLine(line: string): boolean {
     const lowerLine = line.toLowerCase();
     
-    // Look for medicine-related keywords
+    // Skip obvious non-medicine lines first
+    if (this.isHeaderOrTotalLine(lowerLine)) {
+      return false;
+    }
+    
+    // Look for medicine-related keywords (including specific medicine names)
     const medicineKeywords = [
       'tab', 'tablet', 'cap', 'capsule', 'syrup', 'syr', 'injection', 'inj',
       'mg', 'ml', 'g', 'gm', 'paracip', 'lactolook', 'diopil', 'forte',
+      'ultracet', 'febuheal', 'trenaxa', 'lubrica', 'tranzyme',
       'medicine', 'drug', 'pharma', 'med'
     ];
     
@@ -779,6 +907,7 @@ export class MedicalBillExtractionService {
     // Check if line has batch/exp patterns
     const hasBatchExpPattern = /\d+\/\d+/.test(line);
     
+    // Must have medicine keyword AND at least one other pattern
     return hasMedicineKeyword && (hasNumericPattern || hasPackPattern || hasBatchExpPattern);
   }
 

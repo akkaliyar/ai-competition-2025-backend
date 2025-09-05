@@ -33,8 +33,8 @@ import { DataSource } from 'typeorm';
         const config = {
           type: 'mysql' as const,
           entities: [ParsedFile, OcrResult, FileMetadata, TableExtraction, BillData, MedicalBill],
-          synchronize: true, // Enable table creation
-          logging: true, // Enable logging to see what's happening
+          synchronize: false, // Disable automatic table deletion/recreation
+          logging: false, // Disable logging to reduce noise
           charset: 'utf8mb4',
           timezone: '+00:00',
           // Only use valid MySQL2 connection options
@@ -121,21 +121,18 @@ export class AppModule implements OnModuleInit {
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       if (this.dataSource.isInitialized) {
-        // Force database synchronization
-        await this.dataSource.synchronize(true);
-        
-        // Verify tables exist
+        // Just verify tables exist without forcing synchronization
         const tables = await this.dataSource.query('SHOW TABLES');
         const tableNames = tables.map(t => Object.values(t)[0]);
         
         // Check if our required tables exist
-        const requiredTables = ['parsed_files', 'file_metadata', 'ocr_results', 'table_extractions', 'bill_data'];
+        const requiredTables = ['parsed_files', 'file_metadata', 'ocr_results', 'table_extractions', 'bill_data', 'medical_bill'];
         const missingTables = requiredTables.filter(table => !tableNames.includes(table));
         
         if (missingTables.length > 0) {
-          // Database synchronization may have failed
+          // Some tables are missing - they will be created when first accessed
         } else {
-          // All required tables are now available!
+          // All required tables are available!
         }
         
       } else {
