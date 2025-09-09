@@ -252,7 +252,7 @@ export class FileUploadController {
             parsedContent: file.parsedContent ? JSON.parse(file.parsedContent) : null,
             structuredTableData: structuredTableData,
             structuredDocumentData: structuredTableData?.structuredPayslipData || null, // Backward compatibility
-            extractedText: file.extractedText,
+            extractedText: file.extractedText || '',
             createdAt: file.createdAt,
             updatedAt: file.updatedAt,
           };
@@ -266,10 +266,16 @@ export class FileUploadController {
   @Get(':id')
   async getFileById(@Param('id', ParseIntPipe) id: number) {
     try {
+      console.log(id,'id');
       const file = await this.fileProcessingService.getParsedFileById(id);
+      console.log('file',file);
+      if (!file) {
+        throw new BadRequestException(`File with ID ${id} not found`);
+      }
       
       // Check if medical bill data exists in database
       const medicalBill = await this.medicalBillService.getMedicalBillByParsedFileId(id);
+      console.log("medicalBill",medicalBill);
       if (medicalBill) {
         // Return the saved medical bill data in the requested format with message and data
         const medicalBillData = this.medicalBillService.convertToDto(medicalBill);
@@ -351,7 +357,7 @@ export class FileUploadController {
           parsedContent: file.parsedContent ? JSON.parse(file.parsedContent) : null,
           structuredTableData: structuredTableData,
           structuredDocumentData: structuredTableData?.structuredPayslipData || null, // Backward compatibility
-          extractedText: file.extractedText,
+          extractedText: file.extractedText || '',
           createdAt: file.createdAt,
           updatedAt: file.updatedAt,
         }
@@ -433,7 +439,7 @@ export class FileUploadController {
         },
         
         // Raw extracted text for debugging
-        extractedText: extractionResult.extractedText,
+        extractedText: extractionResult.extractedText || '',
         
         // Bounding box information (not available in ParsedFile)
         boundingBoxes: null
@@ -568,7 +574,7 @@ export class FileUploadController {
         data: {
           id: file.id,
           fileName: file.originalName,
-          extractedText: file.extractedText,
+          extractedText: file.extractedText || '',
           extractedTextLength: file.extractedText ? file.extractedText.length : 0,
           isMedicalBill: file.extractedText ? this.medicalBillExtractionService.isMedicalBill(file.extractedText) : false,
           medicalBillData: file.extractedText && this.medicalBillExtractionService.isMedicalBill(file.extractedText) 
